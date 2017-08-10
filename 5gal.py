@@ -14,10 +14,8 @@ one_quart= 946.353
 ingredients = []
 
 number_of_ingredients = int(input("How many ingredients? "))
-#if number_of_ingredients > 10:
-#	print("That's just way too many ingredients.")
-#else:
-#	print("OK, " + str(number_of_ingredients) + " ingredients, then.")
+counter = number_of_ingredients
+
 
 class ingredient:
 	def __init__(self, name_of_ingredient, amount_of_ingredient):
@@ -34,16 +32,16 @@ for number in range(number_of_ingredients):
 	name_of_ingredient = input("Name of ingredient: ")
 	amount_of_ingredient = float(input("Amount of ingredient: "))
 	measurement_of_ingredient =  input("Measurement of ingredient (mL, Oz, Tbsp, Tsp, L, shots, handles, cups, gallons, quarts: ")
-	if measurement_of_ingredient == "mL":
+	measurement_of_ingredient = measurement_of_ingredient.lower()
+	if measurement_of_ingredient == "ml":
 		pass
-	elif measurement_of_ingredient == 'Oz':
+	elif measurement_of_ingredient == 'oz':
 		amount_of_ingredient = amount_of_ingredient * one_oz
-		measurement_of_ingredient = mL
-	elif measurement_of_ingredient == 'Tbsp':
+	elif measurement_of_ingredient == 'tbsp':
 		amount_of_ingredient = amount_of_ingredient * one_tbsp
-	elif measurement_of_ingredient == 'Tsp':
+	elif measurement_of_ingredient == 'tsp':
 		amount_of_ingredient = amount_of_ingredient * one_tsp
-	elif measurement_of_ingredient == 'Liter':
+	elif measurement_of_ingredient == 'liter':
 		amount_of_ingredient = amount_of_ingredient * one_liter
 	elif measurement_of_ingredient == 'shots':
 		amount_of_ingredient = amount_of_ingredient * one_shot
@@ -61,4 +59,9 @@ for number in range(number_of_ingredients):
 	measurement_of_ingredient = "mL"
 	ingredients.append([ingredient(name_of_ingredient,amount_of_ingredient)])
 
-print(ingredients)
+print(number_of_ingredients)
+print(counter)
+
+while counter <= number_of_ingredients:
+	print(ingredients.pop())
+	counter =  counter - 1
