@@ -80,5 +80,5 @@ for key,value in ingredients.items():
 	else:
 		print("Not a valid measurement")
 
-	print(key,amount_of_ingredient,measurement_of_output)
+	print("Ingredient: " + key, "Amount: " + str(amount_of_ingredient),measurement_of_output)
 
