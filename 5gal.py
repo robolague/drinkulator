@@ -11,22 +11,12 @@ one_handle = 1750
 one_cup = 236.588
 one_gallon = 3785.41
 one_quart= 946.353
-ingredients = []
+one_5gal = 18927.1
+ingredients = {}
+sum_of_ingredients = 0
 
 number_of_ingredients = int(input("How many ingredients? "))
-counter = number_of_ingredients
 
-
-class ingredient:
-	def __init__(self, name_of_ingredient, amount_of_ingredient):
-		self.name_of_ingredient = name_of_ingredient
-		self.amount_of_ingredient = amount_of_ingredient
-	
-	def __str__(self):
-		return "Name: %s, Amount: %s mL" % (self.name_of_ingredient, self.amount_of_ingredient)
-
-	def __repr__(self):
-		return "Name: %s, Amount: %s mL" % (self.name_of_ingredient, self.amount_of_ingredient)
 
 for number in range(number_of_ingredients):
 	name_of_ingredient = input("Name of ingredient: ")
@@ -41,7 +31,7 @@ for number in range(number_of_ingredients):
 		amount_of_ingredient = amount_of_ingredient * one_tbsp
 	elif measurement_of_ingredient == 'tsp':
 		amount_of_ingredient = amount_of_ingredient * one_tsp
-	elif measurement_of_ingredient == 'liter':
+	elif measurement_of_ingredient == 'liters':
 		amount_of_ingredient = amount_of_ingredient * one_liter
 	elif measurement_of_ingredient == 'shots':
 		amount_of_ingredient = amount_of_ingredient * one_shot
@@ -56,12 +46,39 @@ for number in range(number_of_ingredients):
 	else:
 		print("Not a valid measurement")
 
-	measurement_of_ingredient = "mL"
-	ingredients.append([ingredient(name_of_ingredient,amount_of_ingredient)])
+	ingredients[name_of_ingredient]=amount_of_ingredient
 
-print(number_of_ingredients)
-print(counter)
+for key,value in ingredients.items():
+	sum_of_ingredients = sum_of_ingredients + value
+	multiply_by = one_5gal / sum_of_ingredients
 
-while counter <= number_of_ingredients:
-	print(ingredients.pop())
-	counter =  counter - 1
+for key,value in ingredients.items():
+	value = multiply_by * value
+
+	measurement_of_output =  input("Measurement of output (mL, Oz, Tbsp, Tsp, L, shots, handles, cups, gallons, quarts: ")
+	measurement_of_output = measurement_of_output.lower()
+	if measurement_of_output == "ml":
+		pass
+	elif measurement_of_output == 'oz':
+		amount_of_ingredient = value / one_oz
+	elif measurement_of_output == 'tbsp':
+		amount_of_ingredient = value / one_tbsp
+	elif measurement_of_output == 'tsp':
+		amount_of_ingredient = value / one_tsp
+	elif measurement_of_output == 'liters':
+		amount_of_ingredient = value / one_liter
+	elif measurement_of_output == 'shots':
+		amount_of_ingredient = value / one_shot
+	elif measurement_of_output == 'handles':
+		amount_of_ingredient = value / one_handle
+	elif measurement_of_output == 'cups':
+		amount_of_ingredient = value / one_cup
+	elif measurement_of_output == 'gallons':
+		amount_of_ingredient = value / one_gallon
+	elif measurement_of_output == 'quarts':
+		amount_of_ingredient = value / one_quart
+	else:
+		print("Not a valid measurement")
+
+	print(key,amount_of_ingredient,measurement_of_output)
+
