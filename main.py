@@ -1,46 +1,5 @@
 #! python3
-import kivy
-from kivy.app import App
-from kivy.uix.label import Label
-from kivy.uix.gridlayout import GridLayout
-from kivy.uix.textinput import TextInput
-from kivy.uix.widget import Widget
-from kivy.uix.button import Button
-from kivy.uix.boxlayout import BoxLayout
-from kivy.properties import ListProperty
-from kivy.uix.screenmanager import ScreenManager, Screen
 import time
-
-sm = ScreenManager()
-
-
-class SplashScreen(GridLayout):
-	def __init__(self,**kwargs):
-		super(SplashScreen,self).__init__(**kwargs)
-		self.cols = 1
-		self.add_widget(Label(text="5 Gallon Converter"))
-
-
-
-class LoginScreen(GridLayout):
-	def __init__(self,**kwargs):
-		super(LoginScreen,self).__init__(**kwargs)
-		self.cols = 2
-		self.add_widget(Label(text='User Name'))
-		self.username = TextInput(multiline=False)
-		self.add_widget(self.username)
-		self.add_widget(Label(text="Password"))
-		self.password = TextInput(password=True,multiline=False)
-		self.add_widget(self.password)
-
-class MyApp(App):
-	def build(self):
-		return SplashScreen()
-		time.sleep(5)
-		SplashScreen.clear_widgets()
-
-if __name__ == '__main__':
-	MyApp().run()
 
 #drinkulator - original calculations by Greg Miller (tenadar.com)
 
