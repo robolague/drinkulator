@@ -1,5 +1,5 @@
 [project]
-name = "drink-calculator"
+name = "drinkulator"
 version = "0.1.0"
 description = "Scale single-drink measurements for a cooler (default 5 gallons)"
 readme = "README.md"

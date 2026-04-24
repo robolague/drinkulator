@@ -7,9 +7,9 @@ import pytest
 
 from main import (
     DEFAULT_COOLER_GALLONS,
-    DRINK_CALCULATOR_INGREDIENT_USAGE,
-    DRINK_CALCULATOR_RECIPE_IMPORTS,
-    DRINK_CALCULATOR_SCALE_REQUESTS,
+    DRINKULATOR_INGREDIENT_USAGE,
+    DRINKULATOR_RECIPE_IMPORTS,
+    DRINKULATOR_SCALE_REQUESTS,
     PURCHASE_SIZE_PRESETS,
     TARGET_COOLER_ML,
     UNIT_TO_ML,
@@ -383,7 +383,7 @@ def test_index_get_renders_form(client):
 
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert "Drink Calculator" in body
+    assert "Drinkulator" in body
     assert f'value="{DEFAULT_COOLER_GALLONS}"' in body
     assert "Recipe Input" in body
 
@@ -541,19 +541,19 @@ def test_metrics_endpoint_exposes_prometheus_metrics(client):
     body = response.get_data(as_text=True)
     assert "http_server_requests_total" in body
     assert "http_server_request_duration_seconds_bucket" in body
-    assert "drink_calculator_scale_requests_total" in body
-    assert "drink_calculator_scale_input_rows_bucket" in body
+    assert "drinkulator_scale_requests_total" in body
+    assert "drinkulator_scale_input_rows_bucket" in body
     assert 'http_route="/metrics"' not in body
 
 
 def test_scale_request_metrics_track_success_and_validation_errors(client):
     success_before = _counter_total_value(
-        DRINK_CALCULATOR_SCALE_REQUESTS,
+        DRINKULATOR_SCALE_REQUESTS,
         source="form",
         result="success",
     )
     error_before = _counter_total_value(
-        DRINK_CALCULATOR_SCALE_REQUESTS,
+        DRINKULATOR_SCALE_REQUESTS,
         source="form",
         result="validation_error",
     )
@@ -582,12 +582,12 @@ def test_scale_request_metrics_track_success_and_validation_errors(client):
     )
 
     success_after = _counter_total_value(
-        DRINK_CALCULATOR_SCALE_REQUESTS,
+        DRINKULATOR_SCALE_REQUESTS,
         source="form",
         result="success",
     )
     error_after = _counter_total_value(
-        DRINK_CALCULATOR_SCALE_REQUESTS,
+        DRINKULATOR_SCALE_REQUESTS,
         source="form",
         result="validation_error",
     )
@@ -598,7 +598,7 @@ def test_scale_request_metrics_track_success_and_validation_errors(client):
 
 def test_recipe_import_metrics_track_validation_error(client):
     error_before = _counter_total_value(
-        DRINK_CALCULATOR_RECIPE_IMPORTS,
+        DRINKULATOR_RECIPE_IMPORTS,
         result="validation_error",
     )
 
@@ -614,7 +614,7 @@ def test_recipe_import_metrics_track_validation_error(client):
 
     assert response.status_code == 200
     error_after = _counter_total_value(
-        DRINK_CALCULATOR_RECIPE_IMPORTS,
+        DRINKULATOR_RECIPE_IMPORTS,
         result="validation_error",
     )
     assert error_after >= error_before + 1
@@ -622,17 +622,17 @@ def test_recipe_import_metrics_track_validation_error(client):
 
 def test_ingredient_usage_metric_tracks_popular_spirits(client):
     vodka_before = _counter_total_value(
-        DRINK_CALCULATOR_INGREDIENT_USAGE,
+        DRINKULATOR_INGREDIENT_USAGE,
         ingredient="vodka",
         source="form",
     )
     gin_before = _counter_total_value(
-        DRINK_CALCULATOR_INGREDIENT_USAGE,
+        DRINKULATOR_INGREDIENT_USAGE,
         ingredient="gin",
         source="form",
     )
     rum_before = _counter_total_value(
-        DRINK_CALCULATOR_INGREDIENT_USAGE,
+        DRINKULATOR_INGREDIENT_USAGE,
         ingredient="rum",
         source="form",
     )
@@ -661,17 +661,17 @@ def test_ingredient_usage_metric_tracks_popular_spirits(client):
     )
 
     vodka_after = _counter_total_value(
-        DRINK_CALCULATOR_INGREDIENT_USAGE,
+        DRINKULATOR_INGREDIENT_USAGE,
         ingredient="vodka",
         source="form",
     )
     gin_after = _counter_total_value(
-        DRINK_CALCULATOR_INGREDIENT_USAGE,
+        DRINKULATOR_INGREDIENT_USAGE,
         ingredient="gin",
         source="form",
     )
     rum_after = _counter_total_value(
-        DRINK_CALCULATOR_INGREDIENT_USAGE,
+        DRINKULATOR_INGREDIENT_USAGE,
         ingredient="rum",
         source="form",
     )
