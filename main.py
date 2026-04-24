@@ -13,7 +13,13 @@ from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 from flask import Flask, Response, g, render_template, request
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    Counter,
+    Gauge,
+    Histogram,
+    generate_latest,
+)
 
 app = Flask(__name__)
 
