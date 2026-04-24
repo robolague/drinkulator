@@ -38,13 +38,6 @@
                 {% endfor %}
             </select>
 
-            <label for="purchase_unit_import">Purchase size suggestions</label>
-            <select id="purchase_unit_import" name="purchase_unit">
-                {% for preset in purchase_size_presets %}
-                <option value="{{ preset.unit }}" {% if purchase_unit == preset.unit %}selected{% endif %}>{{ preset.label }}</option>
-                {% endfor %}
-            </select>
-
             <button class="secondary" type="submit" name="action" value="import">Import + Convert Recipe</button>
         </form>
     </section>
@@ -78,13 +71,6 @@
                 {% endfor %}
             </select>
 
-            <label for="purchase_unit">Purchase size suggestions</label>
-            <select id="purchase_unit" name="purchase_unit">
-                {% for preset in purchase_size_presets %}
-                <option value="{{ preset.unit }}" {% if purchase_unit == preset.unit %}selected{% endif %}>{{ preset.label }}</option>
-                {% endfor %}
-            </select>
-
             <button class="primary" type="submit" name="action" value="scale">Scale recipe</button>
         </form>
     </section>
@@ -95,11 +81,25 @@
         <ul class="results">
             {% for item in results %}
             <li>
-                <span>{{ item.name }}</span>
-                <strong>{{ item.amount }} {{ unit_labels[output_unit] }}</strong>
-                {% if item.purchase_count and item.purchase_label %}
+                <div class="result-main">
+                    <span>{{ item.name }}</span>
+                    <strong>{{ item.amount }} {{ unit_labels[output_unit] }}</strong>
+                </div>
+                {% if item.purchase_count and item.purchase_label and item.purchase_options %}
                 <small class="purchase-hints">
-                    Buy as: {{ item.purchase_count }} x {{ item.purchase_label }}
+                    Buy as: {{ item.purchase_count }} x
+                    <select class="purchase-option-select" data-base-ml="{{ item.scaled_ml }}">
+                        {% for option in item.purchase_options %}
+                        <option
+                            value="{{ option.size_ml }}"
+                            data-label="{{ option.label }}"
+                            data-size-ml="{{ option.size_ml }}"
+                            {% if option.unit == item.purchase_unit %}selected{% endif %}
+                        >
+                            {{ option.label }}
+                        </option>
+                        {% endfor %}
+                    </select>
                 </small>
                 {% endif %}
             </li>
@@ -147,6 +147,23 @@
 
     addButton.addEventListener("click", () => {
         addIngredientRow();
+    });
+
+    function updatePurchaseHintText(selectEl) {
+        const hint = selectEl.closest(".purchase-hints");
+        const selectedOption = selectEl.options[selectEl.selectedIndex];
+        const scaledMl = Number.parseFloat(selectEl.dataset.baseMl || "0");
+        const sizeMl = Number.parseFloat(selectedOption?.dataset.sizeMl || "0");
+        const label = selectedOption?.dataset.label || selectedOption?.textContent || "";
+        const count = Math.max(1, Math.ceil(scaledMl / sizeMl));
+        hint.innerHTML = `Buy as: ${count} x `;
+        hint.appendChild(selectEl);
+    }
+
+    document.querySelectorAll(".purchase-option-select").forEach((selectEl) => {
+        selectEl.addEventListener("change", () => {
+            updatePurchaseHintText(selectEl);
+        });
     });
 
 </script>

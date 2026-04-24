@@ -114,6 +114,23 @@ button:hover {
     margin-top: 0.2rem;
 }
 
+.purchase-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.35rem;
+}
+
+.purchase-row select {
+    width: auto;
+    min-width: 180px;
+}
+
+.purchase-row .purchase-count {
+    color: #0f172a;
+}
+
 @media (max-width: 700px) {
     .ingredient-row {
         grid-template-columns: 1fr;
