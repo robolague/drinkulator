@@ -1,9 +1,11 @@
 #! python3
 from __future__ import annotations
 
+import ipaddress
 import json
 import math
 import re
+import socket
 from typing import Any
 from urllib.error import URLError
 from urllib.parse import urlparse
@@ -84,6 +86,16 @@ JSON_LD_RE = re.compile(
     r"<script[^>]*type=[\"']application/ld\+json[\"'][^>]*>(?P<json>.*?)</script>",
     re.IGNORECASE | re.DOTALL,
 )
+RECIPE_INGREDIENT_ITEMPROP_RE = re.compile(
+    r"<[^>]*itemprop=[\"']recipeIngredient[\"'][^>]*>(?P<value>.*?)</[^>]+>",
+    re.IGNORECASE | re.DOTALL,
+)
+RECIPE_INGREDIENT_LIST_RE = re.compile(
+    r"<(?:ul|ol)[^>]*(?:id|class)=[\"'][^\"']*ingredient[^\"']*[\"'][^>]*>"
+    r"(?P<body>.*?)</(?:ul|ol)>",
+    re.IGNORECASE | re.DOTALL,
+)
+LIST_ITEM_RE = re.compile(r"<li[^>]*>(?P<item>.*?)</li>", re.IGNORECASE | re.DOTALL)
 
 PURCHASE_SIZE_PRESETS = [
     {
@@ -205,12 +217,7 @@ def extract_recipe_lines_from_json_ld(page_html: str) -> list[str]:
         except json.JSONDecodeError:
             continue
         _collect_recipe_ingredients(data, extracted)
-
-    deduped: list[str] = []
-    for line in extracted:
-        if line not in deduped:
-            deduped.append(line)
-    return deduped
+    return _dedupe_lines(extracted)
 
 
 def _collect_recipe_ingredients(node: Any, sink: list[str]) -> None:
@@ -228,19 +235,108 @@ def _collect_recipe_ingredients(node: Any, sink: list[str]) -> None:
             _collect_recipe_ingredients(item, sink)
 
 
+def _dedupe_lines(lines: list[str]) -> list[str]:
+    deduped: list[str] = []
+    for line in lines:
+        if line and line not in deduped:
+            deduped.append(line)
+    return deduped
+
+
+def _clean_html_text(raw_html: str) -> str:
+    without_tags = re.sub(r"<[^>]+>", " ", raw_html)
+    return re.sub(r"\s+", " ", without_tags).strip()
+
+
+def _extract_li_text(page_html: str) -> list[str]:
+    lines: list[str] = []
+    for item_match in LIST_ITEM_RE.finditer(page_html):
+        line = _clean_html_text(item_match.group("item"))
+        if line:
+            lines.append(line)
+    return lines
+
+
 def extract_recipe_lines_from_html(page_html: str) -> list[str]:
-    li_matches = re.findall(
-        r"<li[^>]*>(.*?)</li>",
-        page_html,
-        flags=re.IGNORECASE | re.DOTALL,
-    )
     candidates: list[str] = []
-    for item in li_matches:
-        stripped = re.sub(r"<[^>]+>", " ", item)
-        line = re.sub(r"\s+", " ", stripped).strip()
+    for itemprop_match in RECIPE_INGREDIENT_ITEMPROP_RE.finditer(page_html):
+        line = _clean_html_text(itemprop_match.group("value"))
         if line:
             candidates.append(line)
-    return candidates
+
+    for list_match in RECIPE_INGREDIENT_LIST_RE.finditer(page_html):
+        candidates.extend(_extract_li_text(list_match.group("body")))
+
+    if not candidates:
+        candidates = _extract_li_text(page_html)
+
+    deduped_candidates = _dedupe_lines(candidates)
+    measurable_lines = [
+        line for line in deduped_candidates if parse_ingredient_line(line) is not None
+    ]
+    if measurable_lines:
+        return measurable_lines
+    return deduped_candidates
+
+
+def _is_disallowed_host_ip(
+    host_ip: ipaddress.IPv4Address | ipaddress.IPv6Address,
+) -> bool:
+    return (
+        host_ip.is_private
+        or host_ip.is_loopback
+        or host_ip.is_link_local
+        or host_ip.is_multicast
+        or host_ip.is_reserved
+        or host_ip.is_unspecified
+    )
+
+
+def _resolve_host_ip_addresses(
+    hostname: str,
+) -> list[ipaddress.IPv4Address | ipaddress.IPv6Address]:
+    try:
+        host_records = socket.getaddrinfo(hostname, None, type=socket.SOCK_STREAM)
+    except socket.gaierror:
+        return []
+
+    resolved_addresses: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = []
+    for host_record in host_records:
+        socket_address = host_record[4]
+        resolved_host = socket_address[0]
+        try:
+            resolved_ip = ipaddress.ip_address(resolved_host)
+        except ValueError:
+            continue
+        resolved_addresses.append(resolved_ip)
+    return resolved_addresses
+
+
+def _validate_public_recipe_host(hostname: str | None) -> None:
+    if not hostname:
+        msg = "Recipe URL must include a hostname."
+        raise ValueError(msg)
+
+    normalized_host = hostname.strip().lower()
+    if normalized_host == "localhost":
+        msg = "Recipe URL host is not allowed for security reasons."
+        raise ValueError(msg)
+
+    try:
+        literal_host_ip = ipaddress.ip_address(normalized_host)
+    except ValueError:
+        literal_host_ip = None
+
+    if literal_host_ip is not None:
+        if _is_disallowed_host_ip(literal_host_ip):
+            msg = "Recipe URL host is not allowed for security reasons."
+            raise ValueError(msg)
+        return
+
+    for resolved_ip in _resolve_host_ip_addresses(hostname):
+        if _is_disallowed_host_ip(resolved_ip):
+            msg = "Recipe URL host is not allowed for security reasons."
+            raise ValueError(msg)
 
 
 def fetch_recipe_lines_from_url(recipe_url: str) -> list[str]:
@@ -248,11 +344,10 @@ def fetch_recipe_lines_from_url(recipe_url: str) -> list[str]:
     if parsed.scheme not in {"http", "https"}:
         msg = "Recipe URL must start with http:// or https://."
         raise ValueError(msg)
+    _validate_public_recipe_host(parsed.hostname)
 
     try:
-        request_obj = Request(
-            recipe_url, headers={"User-Agent": "DrinkCalculator/1.0 (+https://example.local)"}
-        )
+        request_obj = Request(recipe_url, headers={"User-Agent": "DrinkCalculator/1.0"})
         with urlopen(request_obj, timeout=10) as response:
             raw_bytes = response.read(MAX_IMPORT_BYTES + 1)
             if len(raw_bytes) > MAX_IMPORT_BYTES:
@@ -374,6 +469,9 @@ def calculate_scaled_recipe(
     target_ml: float = TARGET_COOLER_ML,
 ) -> list[dict[str, Any]]:
     total_ml = sum(item["amount_ml"] for item in ingredients)
+    if total_ml <= 0:
+        msg = "Total ingredient volume must be greater than zero."
+        raise ValueError(msg)
     multiplier = target_ml / total_ml
     output_factor = UNIT_TO_ML[output_unit]
 
@@ -398,6 +496,9 @@ def calculate_scaled_recipe_with_purchase_options(
     target_ml: float = TARGET_COOLER_ML,
 ) -> list[dict[str, Any]]:
     total_ml = sum(item["amount_ml"] for item in ingredients)
+    if total_ml <= 0:
+        msg = "Total ingredient volume must be greater than zero."
+        raise ValueError(msg)
     multiplier = target_ml / total_ml
     output_factor = UNIT_TO_ML[output_unit]
     selected_purchase_units = selected_purchase_units or {}
@@ -465,6 +566,8 @@ def build_scale_payload_from_rows(
 ]:
     errors: list[str] = []
     selected_purchase_units = selected_purchase_units or {}
+    if not any(item["unit"] == default_purchase_unit for item in PURCHASE_SIZE_PRESETS):
+        default_purchase_unit = DEFAULT_PURCHASE_UNIT
 
     cooler_gallons = parse_amount(cooler_gallons_input)
     if cooler_gallons is None or cooler_gallons <= 0:
@@ -640,7 +743,6 @@ def index() -> str:
         results=results,
         unit_order=UNIT_ORDER,
         unit_labels=UNIT_LABELS,
-        target_gallons=DEFAULT_COOLER_GALLONS,
     )
 
 
@@ -671,4 +773,3 @@ def scale_results() -> str:
 
 if __name__ == "__main__":
     app.run(debug=True)
-

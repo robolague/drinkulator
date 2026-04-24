@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - "**/*.py"
+      - "templates/**"
+      - "static/**"
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/**"
@@ -12,6 +14,8 @@ on:
       - master
     paths:
       - "**/*.py"
+      - "templates/**"
+      - "static/**"
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/**"

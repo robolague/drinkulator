@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import ipaddress
+from urllib.error import URLError
+
 import pytest
 
 from main import (
@@ -8,13 +11,19 @@ from main import (
     TARGET_COOLER_ML,
     UNIT_TO_ML,
     app,
+    build_scale_payload_from_request,
+    build_scale_payload_from_rows,
     calculate_scaled_recipe,
+    calculate_scaled_recipe_with_purchase_options,
     calculate_scaled_recipe_with_purchase_suggestions,
+    extract_recipe_lines_from_html,
     extract_recipe_lines_from_json_ld,
+    fetch_recipe_lines_from_url,
     import_ingredient_rows_from_url,
     normalize_unit,
     parse_amount,
     parse_ingredient_line,
+    parse_ingredients,
 )
 
 
@@ -64,6 +73,201 @@ def test_extract_recipe_lines_from_json_ld():
     ]
 
 
+def test_extract_recipe_lines_from_html_prefers_ingredient_like_entries():
+    html = """
+    <ul>
+        <li>Navigation Link</li>
+        <li>2 oz Vodka</li>
+        <li>Mix everything and serve.</li>
+        <li>1/2 gallon Orange Juice</li>
+    </ul>
+    """
+    assert extract_recipe_lines_from_html(html) == [
+        "2 oz Vodka",
+        "1/2 gallon Orange Juice",
+    ]
+
+
+def test_parse_ingredients_ignores_completely_blank_row():
+    parsed, errors = parse_ingredients([{"name": " ", "amount": " ", "unit": "oz"}])
+    assert parsed == []
+    assert errors == []
+
+
+def test_parse_ingredients_collects_validation_errors():
+    parsed, errors = parse_ingredients(
+        [
+            {"name": "", "amount": "1", "unit": "oz"},
+            {"name": "Vodka", "amount": "", "unit": "oz"},
+            {"name": "Vodka", "amount": "abc", "unit": "oz"},
+            {"name": "Vodka", "amount": "1", "unit": "bad"},
+        ]
+    )
+    assert parsed == []
+    assert errors == [
+        "Ingredient 1: name is required.",
+        "Ingredient 2: amount is required.",
+        "Ingredient 3: amount must be numeric.",
+        "Ingredient 4: unit 'bad' is not valid.",
+    ]
+
+
+class _FakeHeaders:
+    def __init__(self, charset: str = "utf-8"):
+        self._charset = charset
+
+    def get_content_charset(self):
+        return self._charset
+
+
+class _FakeResponse:
+    def __init__(self, body: bytes, charset: str = "utf-8"):
+        self._body = body
+        self.headers = _FakeHeaders(charset=charset)
+
+    def read(self, _size: int) -> bytes:
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+
+def test_fetch_recipe_lines_from_url_rejects_invalid_scheme():
+    with pytest.raises(
+        ValueError, match="Recipe URL must start with http:// or https://."
+    ):
+        fetch_recipe_lines_from_url("ftp://example.com/recipe")
+
+
+def test_fetch_recipe_lines_from_url_rejects_private_host(monkeypatch):
+    monkeypatch.setattr(
+        "main._resolve_host_ip_addresses",
+        lambda _host: [ipaddress.ip_address("127.0.0.1")],
+    )
+    with pytest.raises(
+        ValueError,
+        match="Recipe URL host is not allowed for security reasons.",
+    ):
+        fetch_recipe_lines_from_url("https://localhost/recipe")
+
+
+def test_fetch_recipe_lines_from_url_rejects_oversized_response(monkeypatch):
+    monkeypatch.setattr("main._resolve_host_ip_addresses", lambda _host: [])
+    monkeypatch.setattr(
+        "main.urlopen",
+        lambda *_args, **_kwargs: _FakeResponse(b"a" * (1_000_000 + 1)),
+    )
+    with pytest.raises(ValueError, match="Recipe page is too large to import."):
+        fetch_recipe_lines_from_url("https://example.com/recipe")
+
+
+def test_fetch_recipe_lines_from_url_wraps_network_errors(monkeypatch):
+    monkeypatch.setattr("main._resolve_host_ip_addresses", lambda _host: [])
+
+    def _raise_error(*_args, **_kwargs):
+        raise URLError("boom")
+
+    monkeypatch.setattr("main.urlopen", _raise_error)
+    with pytest.raises(ValueError, match="Could not fetch recipe URL:"):
+        fetch_recipe_lines_from_url("https://example.com/recipe")
+
+
+def test_fetch_recipe_lines_from_url_uses_json_ld_then_html_fallback(monkeypatch):
+    monkeypatch.setattr("main._resolve_host_ip_addresses", lambda _host: [])
+    monkeypatch.setattr(
+        "main.urlopen",
+        lambda *_args, **_kwargs: _FakeResponse(
+            b"<html><body><ul><li>2 oz Vodka</li><li>No amount</li></ul></body></html>"
+        ),
+    )
+    assert fetch_recipe_lines_from_url("https://example.com/recipe") == ["2 oz Vodka"]
+
+
+def test_build_scale_payload_from_rows_handles_invalid_default_purchase_unit():
+    ingredient_rows = [{"name": "Vodka", "amount": "2", "unit": "oz"}]
+    (
+        _rows,
+        results,
+        errors,
+        _output_unit,
+        default_purchase_unit,
+        _recipe_url,
+        _cooler_input,
+    ) = build_scale_payload_from_rows(
+        ingredient_rows=ingredient_rows,
+        output_unit="oz",
+        default_purchase_unit="not-a-real-unit",
+        cooler_gallons_input="0.3",
+        recipe_url="",
+    )
+    assert errors == []
+    assert results
+    assert default_purchase_unit == "bottles_750ml"
+    assert results[0]["purchase_unit"] == "bottles_750ml"
+
+
+def test_build_scale_payload_from_rows_reports_invalid_cooler_size():
+    (
+        _rows,
+        results,
+        errors,
+        _output_unit,
+        _default_purchase_unit,
+        _recipe_url,
+        _cooler_input,
+    ) = build_scale_payload_from_rows(
+        ingredient_rows=[{"name": "Vodka", "amount": "2", "unit": "oz"}],
+        output_unit="oz",
+        default_purchase_unit="bottles_750ml",
+        cooler_gallons_input="-1",
+        recipe_url="",
+    )
+    assert "Cooler size must be a number greater than zero." in errors
+    assert results == []
+
+
+def test_build_scale_payload_from_request_preserves_purchase_overrides():
+    class _FakeForm:
+        def __init__(self):
+            self._data = {
+                "output_unit": "oz",
+                "default_purchase_unit": "bottles_750ml",
+                "cooler_gallons": "5",
+                "purchase_unit_vodka-1": "handles",
+            }
+            self._lists = {
+                "name": ["Vodka"],
+                "amount": ["2"],
+                "unit": ["oz"],
+            }
+
+        def get(self, key, default=None):
+            return self._data.get(key, default)
+
+        def getlist(self, key):
+            return self._lists.get(key, [])
+
+        def items(self):
+            return self._data.items()
+
+    (
+        _rows,
+        results,
+        errors,
+        _output_unit,
+        _default_purchase_unit,
+        _recipe_url,
+        _cooler_input,
+    ) = build_scale_payload_from_request(_FakeForm())
+    assert errors == []
+    assert results
+    assert results[0]["slug"] == "vodka-1"
+    assert results[0]["purchase_unit"] == "handles"
+
+
 def test_import_ingredient_rows_from_url_parses_recipe(monkeypatch):
     sample_lines = ["2 oz Vodka", "4 oz Orange Juice", "pinch of salt"]
     monkeypatch.setattr("main.fetch_recipe_lines_from_url", lambda _url: sample_lines)
@@ -99,6 +303,14 @@ def test_calculate_scaled_recipe_scales_to_cooler_size():
     assert [item["name"] for item in results] == ["Vodka", "Orange Juice"]
 
 
+def test_calculate_scaled_recipe_raises_when_total_volume_zero():
+    with pytest.raises(
+        ValueError,
+        match="Total ingredient volume must be greater than zero.",
+    ):
+        calculate_scaled_recipe([], "oz")
+
+
 def test_calculate_scaled_recipe_with_purchase_suggestions():
     ingredients = [{"name": "Vodka", "amount_ml": 1750.0}]
 
@@ -123,6 +335,14 @@ def test_calculate_scaled_recipe_with_purchase_suggestions():
             "purchase_options": PURCHASE_SIZE_PRESETS,
         }
     ]
+
+
+def test_calculate_scaled_recipe_with_purchase_options_raises_when_total_volume_zero():
+    with pytest.raises(
+        ValueError,
+        match="Total ingredient volume must be greater than zero.",
+    ):
+        calculate_scaled_recipe_with_purchase_options([], "oz")
 
 
 def test_purchase_size_presets_include_common_units():
