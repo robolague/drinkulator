@@ -56,7 +56,10 @@ def test_extract_recipe_lines_from_json_ld():
         {"@type":"Recipe","recipeIngredient":["2 oz Vodka", "4 oz Orange Juice"]}
     </script>
     """
-    assert extract_recipe_lines_from_json_ld(html) == ["2 oz Vodka", "4 oz Orange Juice"]
+    assert extract_recipe_lines_from_json_ld(html) == [
+        "2 oz Vodka",
+        "4 oz Orange Juice",
+    ]
 
 
 def test_import_ingredient_rows_from_url_parses_recipe(monkeypatch):
@@ -72,7 +75,10 @@ def test_import_ingredient_rows_from_url_parses_recipe(monkeypatch):
 
 
 def test_import_ingredient_rows_from_url_raises_when_nothing_parseable(monkeypatch):
-    monkeypatch.setattr("main.fetch_recipe_lines_from_url", lambda _url: ["dash bitters"])
+    monkeypatch.setattr(
+        "main.fetch_recipe_lines_from_url",
+        lambda _url: ["dash bitters"],
+    )
 
     with pytest.raises(ValueError, match="Could not find measurable ingredients"):
         import_ingredient_rows_from_url("https://example.com/recipe")

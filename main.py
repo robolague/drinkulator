@@ -75,7 +75,7 @@ FRACTION_RE = re.compile(
     r"^(?P<whole>\d+)\s+(?P<num>\d+)/(?P<den>\d+)$|^(?P<frac_num>\d+)/(?P<frac_den>\d+)$"
 )
 AMOUNT_RE = re.compile(
-    r"^(?P<amount>\d+(?:\.\d+)?|\d+\s+\d+/\d+|\d+/\d+)\s*(?P<rest>.*)$"
+    r"^(?P<amount>\d+\s+\d+/\d+|\d+/\d+|\d+(?:\.\d+)?)\s*(?P<rest>.*)$"
 )
 JSON_LD_RE = re.compile(
     r"<script[^>]*type=[\"']application/ld\+json[\"'][^>]*>(?P<json>.*?)</script>",
@@ -83,11 +83,21 @@ JSON_LD_RE = re.compile(
 )
 
 COMMON_INGREDIENT_SIZES = [
-    {"name": "Vodka", "amount": 1.75, "unit": "liters", "label": "Vodka handle (1.75L)"},
+    {
+        "name": "Vodka",
+        "amount": 1.75,
+        "unit": "liters",
+        "label": "Vodka handle (1.75L)",
+    },
     {"name": "Vodka", "amount": 750, "unit": "ml", "label": "Vodka bottle (750mL)"},
     {"name": "Vodka", "amount": 1, "unit": "liters", "label": "Vodka bottle (1L)"},
     {"name": "Club Soda", "amount": 2, "unit": "liters", "label": "Club soda (2L)"},
-    {"name": "Orange Juice", "amount": 52, "unit": "oz", "label": "Orange juice (52oz)"},
+    {
+        "name": "Orange Juice",
+        "amount": 52,
+        "unit": "oz",
+        "label": "Orange juice (52oz)",
+    },
 ]
 
 
@@ -129,18 +139,24 @@ def parse_ingredient_line(line: str) -> dict[str, Any] | None:
     normalized = normalized.replace("—", "-").replace("–", "-")
     normalized = re.sub(r"(\d)([A-Za-z])", r"\1 \2", normalized)
 
-    named_parts = re.match(r"^(?P<name>[^:-]+?)\s*[:\-]\s*(?P<amount_part>.+)$", normalized)
+    named_parts = re.match(
+        r"^(?P<name>[^:-]+?)\s*[:\-]\s*(?P<amount_part>.+)$",
+        normalized,
+    )
     if named_parts:
-        parsed = _parse_amount_unit_name(named_parts.group("amount_part"))
-        if not parsed:
+        parsed = _parse_amount_unit(named_parts.group("amount_part"))
+        if parsed is None:
             return None
-        parsed["name"] = named_parts.group("name").strip()
-        return parsed
+        return {
+            "name": named_parts.group("name").strip(),
+            "amount": parsed[0],
+            "unit": parsed[1],
+        }
 
     return _parse_amount_unit_name(normalized)
 
 
-def _parse_amount_unit_name(text: str) -> dict[str, Any] | None:
+def _parse_amount_unit(text: str) -> tuple[float, str] | None:
     amount_match = AMOUNT_RE.match(text.strip())
     if not amount_match:
         return None
@@ -153,10 +169,21 @@ def _parse_amount_unit_name(text: str) -> dict[str, Any] | None:
     if not rest:
         return None
 
-    rest_parts = rest.split(maxsplit=1)
-    unit_key = normalize_unit(rest_parts[0].strip(" ,.;:"))
+    unit_token = rest.split(maxsplit=1)[0].strip(" ,.;:")
+    unit_key = normalize_unit(unit_token)
     if not unit_key:
         return None
+    return amount, unit_key
+
+
+def _parse_amount_unit_name(text: str) -> dict[str, Any] | None:
+    parsed = _parse_amount_unit(text)
+    if parsed is None:
+        return None
+    amount, unit_key = parsed
+
+    rest = AMOUNT_RE.match(text.strip()).group("rest").strip(" ,.")
+    rest_parts = rest.split(maxsplit=1)
 
     name = rest_parts[1].strip(" ,.") if len(rest_parts) > 1 else ""
     if name.lower().startswith("of "):
@@ -202,7 +229,11 @@ def _collect_recipe_ingredients(node: Any, sink: list[str]) -> None:
 
 
 def extract_recipe_lines_from_html(page_html: str) -> list[str]:
-    li_matches = re.findall(r"<li[^>]*>(.*?)</li>", page_html, flags=re.IGNORECASE | re.DOTALL)
+    li_matches = re.findall(
+        r"<li[^>]*>(.*?)</li>",
+        page_html,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
     candidates: list[str] = []
     for item in li_matches:
         stripped = re.sub(r"<[^>]+>", " ", item)
@@ -302,7 +333,9 @@ def parse_ingredients(
 
 
 def calculate_scaled_recipe(
-    ingredients: list[dict[str, Any]], output_unit: str, target_ml: float = TARGET_COOLER_ML
+    ingredients: list[dict[str, Any]],
+    output_unit: str,
+    target_ml: float = TARGET_COOLER_ML,
 ) -> list[dict[str, Any]]:
     total_ml = sum(item["amount_ml"] for item in ingredients)
     multiplier = target_ml / total_ml
