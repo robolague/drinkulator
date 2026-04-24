@@ -6,12 +6,20 @@ import json
 import math
 import re
 import socket
+import time
 from typing import Any
 from urllib.error import URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-from flask import Flask, render_template, request
+from flask import Flask, Response, g, render_template, request
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    Counter,
+    Gauge,
+    Histogram,
+    generate_latest,
+)
 
 app = Flask(__name__)
 
@@ -20,6 +28,48 @@ US_FLUID_OUNCE_ML = 29.5735295625
 US_GALLON_ML = 3785.411784
 TARGET_COOLER_ML = DEFAULT_COOLER_GALLONS * US_GALLON_ML
 MAX_IMPORT_BYTES = 1_000_000
+METRICS_EXCLUDED_PATHS = {"/metrics"}
+
+HTTP_SERVER_REQUESTS = Counter(
+    "http_server_requests",
+    "Total number of HTTP server requests.",
+    ["http_request_method", "http_route", "http_response_status_code"],
+)
+HTTP_SERVER_REQUEST_DURATION_SECONDS = Histogram(
+    "http_server_request_duration_seconds",
+    "Duration of inbound HTTP requests in seconds.",
+    ["http_request_method", "http_route", "http_response_status_code"],
+)
+HTTP_SERVER_ACTIVE_REQUESTS = Gauge(
+    "http_server_active_requests",
+    "In-flight HTTP server requests.",
+    ["http_request_method", "http_route"],
+)
+DRINK_CALCULATOR_SCALE_REQUESTS = Counter(
+    "drink_calculator_scale_requests",
+    "Drink scale request outcomes.",
+    ["source", "result"],
+)
+DRINK_CALCULATOR_SCALE_INPUT_ROWS = Histogram(
+    "drink_calculator_scale_input_rows",
+    "Ingredient row count submitted for scaling.",
+    ["source"],
+)
+DRINK_CALCULATOR_SCALE_RESULT_ROWS = Histogram(
+    "drink_calculator_scale_result_rows",
+    "Scaled ingredient count returned by successful requests.",
+    ["source"],
+)
+DRINK_CALCULATOR_INGREDIENT_USAGE = Counter(
+    "drink_calculator_ingredient_usage",
+    "Ingredient usage frequency in successful scale requests.",
+    ["ingredient", "source"],
+)
+DRINK_CALCULATOR_RECIPE_IMPORTS = Counter(
+    "drink_calculator_recipe_imports",
+    "Recipe import outcomes.",
+    ["result"],
+)
 
 UNIT_TO_ML = {
     "ml": 1.0,
@@ -111,6 +161,87 @@ PURCHASE_SIZE_PRESETS = [
     {"unit": "jugs_1gal", "label": "Jugs (1 gallon)", "size_ml": UNIT_TO_ML["gallons"]},
 ]
 DEFAULT_PURCHASE_UNIT = "bottles_750ml"
+
+
+def _should_track_request_metrics() -> bool:
+    if request.path in METRICS_EXCLUDED_PATHS:
+        return False
+    if request.endpoint == "static":
+        return False
+    return True
+
+
+def _get_request_route() -> str:
+    if request.url_rule and request.url_rule.rule:
+        return request.url_rule.rule
+    if request.endpoint:
+        return request.endpoint
+    return "unknown"
+
+
+@app.before_request
+def _record_http_metrics_on_request_start() -> None:
+    if not _should_track_request_metrics():
+        g.metrics_tracked = False
+        return
+
+    method = request.method.upper()
+    route = _get_request_route()
+    g.metrics_tracked = True
+    g.metrics_http_method = method
+    g.metrics_http_route = route
+    g.metrics_started_at = time.perf_counter()
+    HTTP_SERVER_ACTIVE_REQUESTS.labels(
+        http_request_method=method,
+        http_route=route,
+    ).inc()
+
+
+@app.after_request
+def _record_http_metrics_on_request_end(response: Response) -> Response:
+    if not getattr(g, "metrics_tracked", False):
+        return response
+
+    method = getattr(g, "metrics_http_method", "UNKNOWN")
+    route = getattr(g, "metrics_http_route", "unknown")
+    status = str(response.status_code)
+
+    HTTP_SERVER_REQUESTS.labels(
+        http_request_method=method,
+        http_route=route,
+        http_response_status_code=status,
+    ).inc()
+
+    started_at = getattr(g, "metrics_started_at", None)
+    if started_at is not None:
+        HTTP_SERVER_REQUEST_DURATION_SECONDS.labels(
+            http_request_method=method,
+            http_route=route,
+            http_response_status_code=status,
+        ).observe(max(0.0, time.perf_counter() - started_at))
+    return response
+
+
+@app.teardown_request
+def _record_http_metrics_after_teardown(_exception: BaseException | None) -> None:
+    if not getattr(g, "metrics_tracked", False):
+        return
+    method = getattr(g, "metrics_http_method", "UNKNOWN")
+    route = getattr(g, "metrics_http_route", "unknown")
+    HTTP_SERVER_ACTIVE_REQUESTS.labels(
+        http_request_method=method,
+        http_route=route,
+    ).dec()
+
+
+def _normalize_ingredient_metric_label(name: str) -> str:
+    normalized = re.sub(r"\s+", " ", name.strip().lower())
+    normalized = re.sub(r"[^a-z0-9]+", "_", normalized).strip("_")
+    if not normalized:
+        return "unknown"
+    if len(normalized) > 64:
+        return normalized[:64].rstrip("_")
+    return normalized
 
 
 def normalize_unit(raw_unit: str) -> str | None:
@@ -555,6 +686,7 @@ def build_scale_payload_from_rows(
     cooler_gallons_input: str,
     recipe_url: str,
     selected_purchase_units: dict[str, str] | None = None,
+    source: str = "unknown",
 ) -> tuple[
     list[dict[str, str]],
     list[dict[str, Any]],
@@ -566,6 +698,7 @@ def build_scale_payload_from_rows(
 ]:
     errors: list[str] = []
     selected_purchase_units = selected_purchase_units or {}
+    DRINK_CALCULATOR_SCALE_INPUT_ROWS.labels(source=source).observe(len(ingredient_rows))
     if not any(item["unit"] == default_purchase_unit for item in PURCHASE_SIZE_PRESETS):
         default_purchase_unit = DEFAULT_PURCHASE_UNIT
 
@@ -599,6 +732,17 @@ def build_scale_payload_from_rows(
             target_ml=cooler_gallons * UNIT_TO_ML["gallons"],
         )
 
+    result = "success" if not errors else "validation_error"
+    DRINK_CALCULATOR_SCALE_REQUESTS.labels(source=source, result=result).inc()
+    if not errors:
+        DRINK_CALCULATOR_SCALE_RESULT_ROWS.labels(source=source).observe(len(results))
+        for ingredient in parsed_ingredients:
+            ingredient_label = _normalize_ingredient_metric_label(ingredient["name"])
+            DRINK_CALCULATOR_INGREDIENT_USAGE.labels(
+                ingredient=ingredient_label,
+                source=source,
+            ).inc()
+
     return (
         ingredient_rows,
         results,
@@ -612,6 +756,7 @@ def build_scale_payload_from_rows(
 
 def build_scale_payload_from_request(
     form_data: Any,
+    source: str = "form",
 ) -> tuple[
     list[dict[str, str]],
     list[dict[str, Any]],
@@ -660,6 +805,7 @@ def build_scale_payload_from_request(
         cooler_gallons_input=cooler_gallons_input,
         recipe_url=recipe_url,
         selected_purchase_units=selected_purchase_units,
+        source=source,
     )
 
 
@@ -697,9 +843,11 @@ def index() -> str:
         if action == "import":
             if not recipe_url:
                 errors.append("Enter a recipe URL before importing.")
+                DRINK_CALCULATOR_RECIPE_IMPORTS.labels(result="validation_error").inc()
             else:
                 try:
                     ingredient_rows = import_ingredient_rows_from_url(recipe_url)
+                    DRINK_CALCULATOR_RECIPE_IMPORTS.labels(result="success").inc()
                     (
                         ingredient_rows,
                         results,
@@ -714,9 +862,11 @@ def index() -> str:
                         default_purchase_unit=default_purchase_unit,
                         cooler_gallons_input=cooler_gallons_input,
                         recipe_url=recipe_url,
+                        source="import",
                     )
                     errors.extend(scale_errors)
                 except ValueError as exc:
+                    DRINK_CALCULATOR_RECIPE_IMPORTS.labels(result="fetch_error").inc()
                     errors.append(str(exc))
                     ingredient_rows = [{"name": "", "amount": "", "unit": "oz"}]
         else:
@@ -756,7 +906,7 @@ def scale_results() -> str:
         default_purchase_unit,
         recipe_url,
         cooler_gallons_input,
-    ) = build_scale_payload_from_request(request.form)
+    ) = build_scale_payload_from_request(request.form, source="htmx")
 
     return render_template(
         "_scaled_results.html",
@@ -769,6 +919,11 @@ def scale_results() -> str:
         results=results,
         unit_labels=UNIT_LABELS,
     )
+
+
+@app.route("/metrics")
+def metrics() -> Response:
+    return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
 
 
 if __name__ == "__main__":
