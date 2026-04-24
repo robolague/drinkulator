@@ -45,28 +45,28 @@ HTTP_SERVER_ACTIVE_REQUESTS = Gauge(
     "In-flight HTTP server requests.",
     ["http_request_method", "http_route"],
 )
-DRINK_CALCULATOR_SCALE_REQUESTS = Counter(
-    "drink_calculator_scale_requests",
+DRINKULATOR_SCALE_REQUESTS = Counter(
+    "drinkulator_scale_requests",
     "Drink scale request outcomes.",
     ["source", "result"],
 )
-DRINK_CALCULATOR_SCALE_INPUT_ROWS = Histogram(
-    "drink_calculator_scale_input_rows",
+DRINKULATOR_SCALE_INPUT_ROWS = Histogram(
+    "drinkulator_scale_input_rows",
     "Ingredient row count submitted for scaling.",
     ["source"],
 )
-DRINK_CALCULATOR_SCALE_RESULT_ROWS = Histogram(
-    "drink_calculator_scale_result_rows",
+DRINKULATOR_SCALE_RESULT_ROWS = Histogram(
+    "drinkulator_scale_result_rows",
     "Scaled ingredient count returned by successful requests.",
     ["source"],
 )
-DRINK_CALCULATOR_INGREDIENT_USAGE = Counter(
-    "drink_calculator_ingredient_usage",
+DRINKULATOR_INGREDIENT_USAGE = Counter(
+    "drinkulator_ingredient_usage",
     "Ingredient usage frequency in successful scale requests.",
     ["ingredient", "source"],
 )
-DRINK_CALCULATOR_RECIPE_IMPORTS = Counter(
-    "drink_calculator_recipe_imports",
+DRINKULATOR_RECIPE_IMPORTS = Counter(
+    "drinkulator_recipe_imports",
     "Recipe import outcomes.",
     ["result"],
 )
@@ -478,7 +478,7 @@ def fetch_recipe_lines_from_url(recipe_url: str) -> list[str]:
     _validate_public_recipe_host(parsed.hostname)
 
     try:
-        request_obj = Request(recipe_url, headers={"User-Agent": "DrinkCalculator/1.0"})
+        request_obj = Request(recipe_url, headers={"User-Agent": "Drinkulator/1.0"})
         with urlopen(request_obj, timeout=10) as response:
             raw_bytes = response.read(MAX_IMPORT_BYTES + 1)
             if len(raw_bytes) > MAX_IMPORT_BYTES:
@@ -698,7 +698,7 @@ def build_scale_payload_from_rows(
 ]:
     errors: list[str] = []
     selected_purchase_units = selected_purchase_units or {}
-    DRINK_CALCULATOR_SCALE_INPUT_ROWS.labels(source=source).observe(len(ingredient_rows))
+    DRINKULATOR_SCALE_INPUT_ROWS.labels(source=source).observe(len(ingredient_rows))
     if not any(item["unit"] == default_purchase_unit for item in PURCHASE_SIZE_PRESETS):
         default_purchase_unit = DEFAULT_PURCHASE_UNIT
 
@@ -733,12 +733,12 @@ def build_scale_payload_from_rows(
         )
 
     result = "success" if not errors else "validation_error"
-    DRINK_CALCULATOR_SCALE_REQUESTS.labels(source=source, result=result).inc()
+    DRINKULATOR_SCALE_REQUESTS.labels(source=source, result=result).inc()
     if not errors:
-        DRINK_CALCULATOR_SCALE_RESULT_ROWS.labels(source=source).observe(len(results))
+        DRINKULATOR_SCALE_RESULT_ROWS.labels(source=source).observe(len(results))
         for ingredient in parsed_ingredients:
             ingredient_label = _normalize_ingredient_metric_label(ingredient["name"])
-            DRINK_CALCULATOR_INGREDIENT_USAGE.labels(
+            DRINKULATOR_INGREDIENT_USAGE.labels(
                 ingredient=ingredient_label,
                 source=source,
             ).inc()
@@ -843,11 +843,11 @@ def index() -> str:
         if action == "import":
             if not recipe_url:
                 errors.append("Enter a recipe URL before importing.")
-                DRINK_CALCULATOR_RECIPE_IMPORTS.labels(result="validation_error").inc()
+                DRINKULATOR_RECIPE_IMPORTS.labels(result="validation_error").inc()
             else:
                 try:
                     ingredient_rows = import_ingredient_rows_from_url(recipe_url)
-                    DRINK_CALCULATOR_RECIPE_IMPORTS.labels(result="success").inc()
+                    DRINKULATOR_RECIPE_IMPORTS.labels(result="success").inc()
                     (
                         ingredient_rows,
                         results,
@@ -866,7 +866,7 @@ def index() -> str:
                     )
                     errors.extend(scale_errors)
                 except ValueError as exc:
-                    DRINK_CALCULATOR_RECIPE_IMPORTS.labels(result="fetch_error").inc()
+                    DRINKULATOR_RECIPE_IMPORTS.labels(result="fetch_error").inc()
                     errors.append(str(exc))
                     ingredient_rows = [{"name": "", "amount": "", "unit": "oz"}]
         else:

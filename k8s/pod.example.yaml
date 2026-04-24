@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: drink-calculator-config
+  name: drinkulator-config
 data:
   FLASK_APP: main
   FLASK_ENV: production
@@ -10,7 +10,7 @@ data:
 apiVersion: v1
 kind: Pod
 metadata:
-  name: drink-calculator
+  name: drinkulator
   labels:
     app: drink-calculator
   annotations:
@@ -19,15 +19,15 @@ metadata:
     prometheus.io/port: "5000"
 spec:
   containers:
-    - name: drink-calculator
-      image: ghcr.io/your-org/drink-calculator:latest
+    - name: drinkulator
+      image: ghcr.io/your-org/drinkulator:latest
       imagePullPolicy: IfNotPresent
       ports:
         - containerPort: 5000
           name: http
       envFrom:
         - configMapRef:
-            name: drink-calculator-config
+            name: drinkulator-config
       readinessProbe:
         httpGet:
           path: /
