@@ -87,5 +87,9 @@ Apply it after setting the image to one you can pull:
 
 ```bash
 kubectl apply -f k8s/pod.example.yaml
-kubectl port-forward pod/drinkulator 5000:5000
+kubectl port-forward service/drink-calculator 5000:5000
 ```
+
+The app is available at <http://127.0.0.1:5000>, and Prometheus-format metrics are
+available at <http://127.0.0.1:5000/metrics>. The example manifest includes
+Prometheus scrape annotations for `/metrics` on port `5000`.

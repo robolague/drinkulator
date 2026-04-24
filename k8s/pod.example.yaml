@@ -12,7 +12,11 @@ kind: Pod
 metadata:
   name: drinkulator
   labels:
-    app: drinkulator
+    app: drink-calculator
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: /metrics
+    prometheus.io/port: "5000"
 spec:
   containers:
     - name: drinkulator
@@ -36,3 +40,21 @@ spec:
           port: http
         initialDelaySeconds: 10
         periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: drink-calculator
+  labels:
+    app: drink-calculator
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: /metrics
+    prometheus.io/port: "5000"
+spec:
+  selector:
+    app: drink-calculator
+  ports:
+    - name: http
+      port: 5000
+      targetPort: http
