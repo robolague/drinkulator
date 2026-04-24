@@ -56,3 +56,36 @@ make lint
 make test
 make check
 ```
+
+## Run with Docker
+
+Build the image:
+
+```bash
+docker build -t drink-calculator:latest .
+```
+
+Run the container:
+
+```bash
+docker run --rm -p 5000:5000 \
+  -e FLASK_APP=main \
+  -e FLASK_ENV=production \
+  -e PORT=5000 \
+  drink-calculator:latest
+```
+
+Then open <http://127.0.0.1:5000>.
+
+## Example Kubernetes pod config
+
+An example Pod + ConfigMap manifest is provided at:
+
+`k8s/pod.example.yaml`
+
+Apply it after setting the image to one you can pull:
+
+```bash
+kubectl apply -f k8s/pod.example.yaml
+kubectl port-forward pod/drink-calculator 5000:5000
+```
