@@ -83,53 +83,13 @@ JSON_LD_RE = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 
-PURCHASE_SIZE_PROFILES = {
-    "spirits": [
-        {"label": "1.75L handle", "size_ml": 1750.0},
-        {"label": "1L bottle", "size_ml": 1000.0},
-        {"label": "750mL bottle", "size_ml": 750.0},
-        {"label": "375mL bottle", "size_ml": 375.0},
-    ],
-    "juice": [
-        {"label": "1 gallon jug", "size_ml": UNIT_TO_ML["gallons"]},
-        {"label": "64oz carton", "size_ml": UNIT_TO_ML["oz"] * 64},
-        {"label": "52oz carton", "size_ml": UNIT_TO_ML["oz"] * 52},
-        {"label": "32oz bottle", "size_ml": UNIT_TO_ML["oz"] * 32},
-    ],
-    "carbonated_mixers": [
-        {"label": "2L bottle", "size_ml": 2000.0},
-        {"label": "1L bottle", "size_ml": 1000.0},
-        {"label": "12oz can", "size_ml": UNIT_TO_ML["oz"] * 12},
-    ],
-    "default": [
-        {"label": "1L bottle", "size_ml": 1000.0},
-        {"label": "750mL bottle", "size_ml": 750.0},
-        {"label": "500mL bottle", "size_ml": 500.0},
-    ],
-}
-
-SPIRIT_KEYWORDS = (
-    "vodka",
-    "gin",
-    "rum",
-    "tequila",
-    "whiskey",
-    "whisky",
-    "bourbon",
-    "scotch",
-    "brandy",
-    "liqueur",
-    "triple sec",
-)
-CARBONATED_MIXER_KEYWORDS = (
-    "soda",
-    "ginger beer",
-    "tonic",
-    "cola",
-    "sprite",
-    "seltzer",
-    "club soda",
-)
+PURCHASE_SIZE_PRESETS = [
+    {"unit": "bottles_750ml", "label": "Bottles (750mL)", "size_ml": 750.0},
+    {"unit": "handles", "label": "Handles (1.75L)", "size_ml": 1750.0},
+    {"unit": "bottles_2l", "label": "Bottles (2L)", "size_ml": 2000.0},
+    {"unit": "jugs_1gal", "label": "Jugs (1 gallon)", "size_ml": UNIT_TO_ML["gallons"]},
+    {"unit": "cans_12oz", "label": "Cans (12oz)", "size_ml": UNIT_TO_ML["oz"] * 12},
+]
 
 
 def normalize_unit(raw_unit: str) -> str | None:
@@ -363,6 +323,13 @@ def parse_ingredients(
     return parsed_ingredients, errors
 
 
+def get_purchase_preset(purchase_unit: str) -> dict[str, Any]:
+    for preset in PURCHASE_SIZE_PRESETS:
+        if preset["unit"] == purchase_unit:
+            return preset
+    return PURCHASE_SIZE_PRESETS[0]
+
+
 def calculate_scaled_recipe(
     ingredients: list[dict[str, Any]],
     output_unit: str,
@@ -385,11 +352,40 @@ def calculate_scaled_recipe(
     return results
 
 
+def calculate_scaled_recipe_with_purchase_suggestions(
+    ingredients: list[dict[str, Any]],
+    output_unit: str,
+    purchase_unit: str,
+    target_ml: float = TARGET_COOLER_ML,
+) -> list[dict[str, Any]]:
+    total_ml = sum(item["amount_ml"] for item in ingredients)
+    multiplier = target_ml / total_ml
+    output_factor = UNIT_TO_ML[output_unit]
+    purchase_preset = get_purchase_preset(purchase_unit)
+    purchase_size_ml = purchase_preset["size_ml"]
+
+    results: list[dict[str, Any]] = []
+    for ingredient in ingredients:
+        scaled_ml = ingredient["amount_ml"] * multiplier
+        output_amount = scaled_ml / output_factor
+        purchase_count = max(1, math.ceil(scaled_ml / purchase_size_ml))
+        results.append(
+            {
+                "name": ingredient["name"],
+                "amount": round(output_amount, 2),
+                "purchase_count": purchase_count,
+                "purchase_label": purchase_preset["label"],
+            }
+        )
+    return results
+
+
 @app.route("/", methods=["GET", "POST"])
 def index() -> str:
     errors: list[str] = []
     results: list[dict[str, Any]] = []
     output_unit = "oz"
+    purchase_unit = PURCHASE_SIZE_PRESETS[0]["unit"]
     recipe_url = ""
     cooler_gallons_input = str(DEFAULT_COOLER_GALLONS)
     ingredient_rows = [{"name": "", "amount": "", "unit": "oz"}]
@@ -401,6 +397,9 @@ def index() -> str:
             "cooler_gallons", str(DEFAULT_COOLER_GALLONS)
         ).strip()
         output_unit = normalize_unit(request.form.get("output_unit", "oz")) or "oz"
+        purchase_unit = request.form.get("purchase_unit", purchase_unit).strip()
+        if not any(item["unit"] == purchase_unit for item in PURCHASE_SIZE_PRESETS):
+            purchase_unit = PURCHASE_SIZE_PRESETS[0]["unit"]
 
         cooler_gallons = parse_amount(cooler_gallons_input)
         if cooler_gallons is None or cooler_gallons <= 0:
@@ -440,9 +439,10 @@ def index() -> str:
             errors.append("Total ingredient volume must be greater than zero.")
 
         if not errors:
-            results = calculate_scaled_recipe(
+            results = calculate_scaled_recipe_with_purchase_suggestions(
                 parsed_ingredients,
                 output_unit,
+                purchase_unit,
                 target_ml=cooler_gallons * UNIT_TO_ML["gallons"],
             )
 
@@ -451,13 +451,14 @@ def index() -> str:
         errors=errors,
         ingredient_rows=ingredient_rows,
         output_unit=output_unit,
+        purchase_unit=purchase_unit,
+        purchase_size_presets=PURCHASE_SIZE_PRESETS,
         recipe_url=recipe_url,
         cooler_gallons_input=cooler_gallons_input,
         results=results,
         unit_order=UNIT_ORDER,
         unit_labels=UNIT_LABELS,
         target_gallons=DEFAULT_COOLER_GALLONS,
-        common_ingredient_sizes=COMMON_INGREDIENT_SIZES,
     )
 
 

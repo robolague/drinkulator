@@ -38,6 +38,13 @@
                 {% endfor %}
             </select>
 
+            <label for="purchase_unit_import">Purchase size suggestions</label>
+            <select id="purchase_unit_import" name="purchase_unit">
+                {% for preset in purchase_size_presets %}
+                <option value="{{ preset.unit }}" {% if purchase_unit == preset.unit %}selected{% endif %}>{{ preset.label }}</option>
+                {% endfor %}
+            </select>
+
             <button class="secondary" type="submit" name="action" value="import">Import + Convert Recipe</button>
         </form>
     </section>
@@ -71,6 +78,13 @@
                 {% endfor %}
             </select>
 
+            <label for="purchase_unit">Purchase size suggestions</label>
+            <select id="purchase_unit" name="purchase_unit">
+                {% for preset in purchase_size_presets %}
+                <option value="{{ preset.unit }}" {% if purchase_unit == preset.unit %}selected{% endif %}>{{ preset.label }}</option>
+                {% endfor %}
+            </select>
+
             <button class="primary" type="submit" name="action" value="scale">Scale recipe</button>
         </form>
     </section>
@@ -83,12 +97,9 @@
             <li>
                 <span>{{ item.name }}</span>
                 <strong>{{ item.amount }} {{ unit_labels[output_unit] }}</strong>
-                {% if item.purchase_options %}
+                {% if item.purchase_count and item.purchase_label %}
                 <small class="purchase-hints">
-                    Buy as:
-                    {% for option in item.purchase_options %}
-                    {{ option.count }} x {{ option.label }}{% if not loop.last %} · {% endif %}
-                    {% endfor %}
+                    Buy as: {{ item.purchase_count }} x {{ item.purchase_label }}
                 </small>
                 {% endif %}
             </li>

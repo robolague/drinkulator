@@ -95,9 +95,23 @@ button:hover {
 }
 .results li {
     display: flex;
+    flex-direction: column;
+    align-items: flex-start;
     justify-content: space-between;
     border-bottom: 1px solid #e2e8f0;
     padding: 0.55rem 0;
+}
+
+.result-main {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.purchase-hints {
+    color: #475569;
+    margin-top: 0.2rem;
 }
 
 @media (max-width: 700px) {
