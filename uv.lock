@@ -88,7 +88,7 @@ wheels = [
 ]
 
 [[package]]
-name = "drink-calculator"
+name = "drinkulator"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
