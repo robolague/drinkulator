@@ -374,6 +374,9 @@ def calculate_scaled_recipe(
     target_ml: float = TARGET_COOLER_ML,
 ) -> list[dict[str, Any]]:
     total_ml = sum(item["amount_ml"] for item in ingredients)
+    if total_ml <= 0:
+        msg = "Total ingredient volume must be greater than zero."
+        raise ValueError(msg)
     multiplier = target_ml / total_ml
     output_factor = UNIT_TO_ML[output_unit]
 
@@ -398,6 +401,9 @@ def calculate_scaled_recipe_with_purchase_options(
     target_ml: float = TARGET_COOLER_ML,
 ) -> list[dict[str, Any]]:
     total_ml = sum(item["amount_ml"] for item in ingredients)
+    if total_ml <= 0:
+        msg = "Total ingredient volume must be greater than zero."
+        raise ValueError(msg)
     multiplier = target_ml / total_ml
     output_factor = UNIT_TO_ML[output_unit]
     selected_purchase_units = selected_purchase_units or {}
@@ -640,7 +646,6 @@ def index() -> str:
         results=results,
         unit_order=UNIT_ORDER,
         unit_labels=UNIT_LABELS,
-        target_gallons=DEFAULT_COOLER_GALLONS,
     )
 
 

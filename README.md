@@ -1,6 +1,6 @@
 # Drink Calculator
 
-Scale single-drink measurements to quantities that fill a 5-gallon cooler.
+Scale single-drink measurements to quantities that fill a cooler (5 gallons by default).
 
 This project is now a lightweight Flask web app with a simple GUI.
 
@@ -39,4 +39,4 @@ Then open <http://127.0.0.1:5000> in your browser.
 
 1. Add one or more ingredients with name, amount, and unit.
 2. Pick an output unit for the final recipe.
-3. Click **Scale to 5.0 gallons** to calculate.
+3. Set cooler size (or keep the 5-gallon default), then click **Scale recipe**.

@@ -9,6 +9,7 @@ from main import (
     UNIT_TO_ML,
     app,
     calculate_scaled_recipe,
+    calculate_scaled_recipe_with_purchase_options,
     calculate_scaled_recipe_with_purchase_suggestions,
     extract_recipe_lines_from_json_ld,
     import_ingredient_rows_from_url,
@@ -99,6 +100,11 @@ def test_calculate_scaled_recipe_scales_to_cooler_size():
     assert [item["name"] for item in results] == ["Vodka", "Orange Juice"]
 
 
+def test_calculate_scaled_recipe_raises_when_total_volume_zero():
+    with pytest.raises(ValueError, match="Total ingredient volume must be greater than zero."):
+        calculate_scaled_recipe([], "oz")
+
+
 def test_calculate_scaled_recipe_with_purchase_suggestions():
     ingredients = [{"name": "Vodka", "amount_ml": 1750.0}]
 
@@ -123,6 +129,11 @@ def test_calculate_scaled_recipe_with_purchase_suggestions():
             "purchase_options": PURCHASE_SIZE_PRESETS,
         }
     ]
+
+
+def test_calculate_scaled_recipe_with_purchase_options_raises_when_total_volume_zero():
+    with pytest.raises(ValueError, match="Total ingredient volume must be greater than zero."):
+        calculate_scaled_recipe_with_purchase_options([], "oz")
 
 
 def test_purchase_size_presets_include_common_units():
