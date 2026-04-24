@@ -447,6 +447,119 @@ def calculate_scaled_recipe_with_purchase_suggestions(
     )
 
 
+def build_scale_payload_from_rows(
+    ingredient_rows: list[dict[str, str]],
+    output_unit: str,
+    default_purchase_unit: str,
+    cooler_gallons_input: str,
+    recipe_url: str,
+    selected_purchase_units: dict[str, str] | None = None,
+) -> tuple[
+    list[dict[str, str]],
+    list[dict[str, Any]],
+    list[str],
+    str,
+    str,
+    str,
+    str,
+]:
+    errors: list[str] = []
+    selected_purchase_units = selected_purchase_units or {}
+
+    cooler_gallons = parse_amount(cooler_gallons_input)
+    if cooler_gallons is None or cooler_gallons <= 0:
+        errors.append("Cooler size must be a number greater than zero.")
+        cooler_gallons = DEFAULT_COOLER_GALLONS
+
+    parsed_ingredients, parsing_errors = parse_ingredients(ingredient_rows)
+    errors.extend(parsing_errors)
+    if not parsed_ingredients:
+        errors.append("Add at least one valid ingredient.")
+
+    total_ml = sum(item["amount_ml"] for item in parsed_ingredients)
+    if parsed_ingredients and total_ml <= 0:
+        errors.append("Total ingredient volume must be greater than zero.")
+
+    results: list[dict[str, Any]] = []
+    if not errors:
+        selected_purchase_units_for_recipe: dict[str, str] = {}
+        for index, ingredient in enumerate(parsed_ingredients, start=1):
+            slug = make_ingredient_slug(ingredient["name"], index)
+            submitted_purchase_unit = selected_purchase_units.get(slug, "").strip()
+            if submitted_purchase_unit:
+                selected_purchase_units_for_recipe[slug] = submitted_purchase_unit
+        results = calculate_scaled_recipe_with_purchase_options(
+            parsed_ingredients,
+            output_unit,
+            selected_purchase_units=selected_purchase_units_for_recipe,
+            default_purchase_unit=default_purchase_unit,
+            target_ml=cooler_gallons * UNIT_TO_ML["gallons"],
+        )
+
+    return (
+        ingredient_rows,
+        results,
+        errors,
+        output_unit,
+        default_purchase_unit,
+        recipe_url,
+        cooler_gallons_input,
+    )
+
+
+def build_scale_payload_from_request(
+    form_data: Any,
+) -> tuple[
+    list[dict[str, str]],
+    list[dict[str, Any]],
+    list[str],
+    str,
+    str,
+    str,
+    str,
+]:
+    output_unit = normalize_unit(form_data.get("output_unit", "oz")) or "oz"
+    default_purchase_unit = form_data.get(
+        "default_purchase_unit",
+        DEFAULT_PURCHASE_UNIT,
+    ).strip()
+    if not any(item["unit"] == default_purchase_unit for item in PURCHASE_SIZE_PRESETS):
+        default_purchase_unit = DEFAULT_PURCHASE_UNIT
+
+    recipe_url = form_data.get("recipe_url", "").strip()
+    cooler_gallons_input = form_data.get(
+        "cooler_gallons",
+        str(DEFAULT_COOLER_GALLONS),
+    ).strip()
+
+    names = form_data.getlist("name")
+    amounts = form_data.getlist("amount")
+    units = form_data.getlist("unit")
+    ingredient_rows: list[dict[str, str]] = []
+    for name, amount_raw, unit_raw in zip(names, amounts, units):
+        ingredient_rows.append(
+            {
+                "name": name,
+                "amount": amount_raw,
+                "unit": normalize_unit(unit_raw or "oz") or "oz",
+            }
+        )
+
+    selected_purchase_units = {
+        key.removeprefix("purchase_unit_"): value
+        for key, value in form_data.items()
+        if key.startswith("purchase_unit_")
+    }
+    return build_scale_payload_from_rows(
+        ingredient_rows=ingredient_rows,
+        output_unit=output_unit,
+        default_purchase_unit=default_purchase_unit,
+        cooler_gallons_input=cooler_gallons_input,
+        recipe_url=recipe_url,
+        selected_purchase_units=selected_purchase_units,
+    )
+
+
 @app.route("/", methods=["GET", "POST"])
 def index() -> str:
     errors: list[str] = []
@@ -484,48 +597,36 @@ def index() -> str:
             else:
                 try:
                     ingredient_rows = import_ingredient_rows_from_url(recipe_url)
+                    (
+                        ingredient_rows,
+                        results,
+                        scale_errors,
+                        output_unit,
+                        default_purchase_unit,
+                        recipe_url,
+                        cooler_gallons_input,
+                    ) = build_scale_payload_from_rows(
+                        ingredient_rows=ingredient_rows,
+                        output_unit=output_unit,
+                        default_purchase_unit=default_purchase_unit,
+                        cooler_gallons_input=cooler_gallons_input,
+                        recipe_url=recipe_url,
+                    )
+                    errors.extend(scale_errors)
                 except ValueError as exc:
                     errors.append(str(exc))
                     ingredient_rows = [{"name": "", "amount": "", "unit": "oz"}]
         else:
-            names = request.form.getlist("name")
-            amounts = request.form.getlist("amount")
-            units = request.form.getlist("unit")
-            ingredient_rows = []
-            for name, amount_raw, unit_raw in zip(names, amounts, units):
-                ingredient_rows.append(
-                    {
-                        "name": name,
-                        "amount": amount_raw,
-                        "unit": normalize_unit(unit_raw or "oz") or "oz",
-                    }
-                )
-
-        parsed_ingredients, parsing_errors = parse_ingredients(ingredient_rows)
-        errors.extend(parsing_errors)
-        if not parsed_ingredients:
-            errors.append("Add at least one valid ingredient.")
-
-        total_ml = sum(item["amount_ml"] for item in parsed_ingredients)
-        if parsed_ingredients and total_ml <= 0:
-            errors.append("Total ingredient volume must be greater than zero.")
-
-        if not errors:
-            selected_purchase_units: dict[str, str] = {}
-            for index, ingredient in enumerate(parsed_ingredients, start=1):
-                slug = make_ingredient_slug(ingredient["name"], index)
-                submitted_purchase_unit = request.form.get(
-                    f"purchase_unit_{slug}", ""
-                ).strip()
-                if submitted_purchase_unit:
-                    selected_purchase_units[slug] = submitted_purchase_unit
-            results = calculate_scaled_recipe_with_purchase_options(
-                parsed_ingredients,
+            (
+                ingredient_rows,
+                results,
+                scale_errors,
                 output_unit,
-                selected_purchase_units=selected_purchase_units,
-                default_purchase_unit=default_purchase_unit,
-                target_ml=cooler_gallons * UNIT_TO_ML["gallons"],
-            )
+                default_purchase_unit,
+                recipe_url,
+                cooler_gallons_input,
+            ) = build_scale_payload_from_request(request.form)
+            errors.extend(scale_errors)
 
     return render_template(
         "index.html",
@@ -540,6 +641,31 @@ def index() -> str:
         unit_order=UNIT_ORDER,
         unit_labels=UNIT_LABELS,
         target_gallons=DEFAULT_COOLER_GALLONS,
+    )
+
+
+@app.route("/scale-results", methods=["POST"])
+def scale_results() -> str:
+    (
+        ingredient_rows,
+        results,
+        errors,
+        output_unit,
+        default_purchase_unit,
+        recipe_url,
+        cooler_gallons_input,
+    ) = build_scale_payload_from_request(request.form)
+
+    return render_template(
+        "_scaled_results.html",
+        errors=errors,
+        ingredient_rows=ingredient_rows,
+        output_unit=output_unit,
+        default_purchase_unit=default_purchase_unit,
+        recipe_url=recipe_url,
+        cooler_gallons_input=cooler_gallons_input,
+        results=results,
+        unit_labels=UNIT_LABELS,
     )
 
 
