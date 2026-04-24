@@ -106,7 +106,9 @@ def index() -> str:
         parsed_ingredients: list[dict[str, Any]] = []
         ingredient_rows = []
 
-        for index, (name, amount_raw, unit_raw) in enumerate(zip(names, amounts, units), start=1):
+        for index, (name, amount_raw, unit_raw) in enumerate(
+            zip(names, amounts, units), start=1
+        ):
             ingredient_rows.append(
                 {
                     "name": name,
