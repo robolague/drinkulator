@@ -527,7 +527,10 @@ def build_scale_payload_from_request(
         default_purchase_unit = DEFAULT_PURCHASE_UNIT
 
     recipe_url = form_data.get("recipe_url", "").strip()
-    cooler_gallons_input = form_data.get("cooler_gallons", str(DEFAULT_COOLER_GALLONS)).strip()
+    cooler_gallons_input = form_data.get(
+        "cooler_gallons",
+        str(DEFAULT_COOLER_GALLONS),
+    ).strip()
 
     names = form_data.getlist("name")
     amounts = form_data.getlist("amount")

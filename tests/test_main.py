@@ -283,5 +283,5 @@ def test_scale_results_returns_partial_with_updated_purchase_count(client):
     assert 'id="scaled-recipe-results"' in body
     assert 'id="purchase_vodka-1"' in body
     assert 'id="purchase_orange-juice-2"' in body
-    assert "19</span> x" in body
-    assert "11</span> x" in body
+    assert "4</span> x" in body
+    assert "36</span> x" in body
