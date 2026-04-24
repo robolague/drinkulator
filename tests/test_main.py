@@ -4,10 +4,12 @@ import pytest
 
 from main import (
     DEFAULT_COOLER_GALLONS,
+    PURCHASE_SIZE_PRESETS,
     TARGET_COOLER_ML,
     UNIT_TO_ML,
     app,
     calculate_scaled_recipe,
+    calculate_scaled_recipe_with_purchase_suggestions,
     extract_recipe_lines_from_json_ld,
     import_ingredient_rows_from_url,
     normalize_unit,
@@ -97,6 +99,35 @@ def test_calculate_scaled_recipe_scales_to_cooler_size():
     assert [item["name"] for item in results] == ["Vodka", "Orange Juice"]
 
 
+def test_calculate_scaled_recipe_with_purchase_suggestions():
+    ingredients = [
+        {"name": "Vodka", "amount_ml": 1750.0},
+    ]
+
+    results = calculate_scaled_recipe_with_purchase_suggestions(
+        ingredients=ingredients,
+        output_unit="liters",
+        target_ml=3500.0,
+        purchase_unit="handles",
+    )
+
+    assert results == [
+        {
+            "name": "Vodka",
+            "amount": 3.5,
+            "purchase_count": 2,
+            "purchase_label": "Handles (1.75L)",
+        }
+    ]
+
+
+def test_purchase_size_presets_include_common_units():
+    keys = {item["unit"] for item in PURCHASE_SIZE_PRESETS}
+    assert "bottles_750ml" in keys
+    assert "handles" in keys
+    assert "bottles_2l" in keys
+
+
 def test_index_get_renders_form(client):
     response = client.get("/")
 
@@ -104,6 +135,7 @@ def test_index_get_renders_form(client):
     body = response.get_data(as_text=True)
     assert "Drink Calculator" in body
     assert f'value="{DEFAULT_COOLER_GALLONS}"' in body
+    assert "Purchase size suggestions" in body
     assert "Recipe Input" in body
 
 
@@ -115,6 +147,7 @@ def test_index_post_shows_validation_errors(client):
             "amount": ["1", "-2"],
             "unit": ["oz", "oz"],
             "output_unit": "oz",
+            "purchase_unit": "bottles_750ml",
             "cooler_gallons": "5",
             "action": "scale",
         },
@@ -134,6 +167,7 @@ def test_index_post_shows_scaled_recipe(client):
             "amount": ["2", "4"],
             "unit": ["oz", "oz"],
             "output_unit": "oz",
+            "purchase_unit": "bottles_750ml",
             "cooler_gallons": "5",
             "action": "scale",
         },
@@ -144,6 +178,7 @@ def test_index_post_shows_scaled_recipe(client):
     assert "Scaled Recipe" in body
     assert "Vodka" in body
     assert "Orange Juice" in body
+    assert "Bottles (750mL)" in body
 
 
 def test_index_post_imports_recipe_from_url(client, monkeypatch):
@@ -159,6 +194,7 @@ def test_index_post_imports_recipe_from_url(client, monkeypatch):
         data={
             "recipe_url": "https://example.com/drink",
             "output_unit": "oz",
+            "purchase_unit": "bottles_750ml",
             "cooler_gallons": "5",
             "action": "import",
         },
@@ -169,3 +205,4 @@ def test_index_post_imports_recipe_from_url(client, monkeypatch):
     assert "Scaled Recipe" in body
     assert "Vodka" in body
     assert "Orange Juice" in body
+    assert "Bottles (750mL)" in body

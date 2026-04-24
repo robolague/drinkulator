@@ -62,20 +62,6 @@
                 {% endfor %}
             </div>
 
-            <div class="quick-add-grid">
-                {% for item in common_ingredient_sizes %}
-                <button
-                    class="secondary quick-add"
-                    type="button"
-                    data-name="{{ item.name }}"
-                    data-amount="{{ item.amount }}"
-                    data-unit="{{ item.unit }}"
-                >
-                    + {{ item.label }}
-                </button>
-                {% endfor %}
-            </div>
-
             <button class="secondary" type="button" id="add-ingredient">+ Add ingredient</button>
 
             <label for="output_unit">Output unit</label>
@@ -97,6 +83,14 @@
             <li>
                 <span>{{ item.name }}</span>
                 <strong>{{ item.amount }} {{ unit_labels[output_unit] }}</strong>
+                {% if item.purchase_options %}
+                <small class="purchase-hints">
+                    Buy as:
+                    {% for option in item.purchase_options %}
+                    {{ option.count }} x {{ option.label }}{% if not loop.last %} · {% endif %}
+                    {% endfor %}
+                </small>
+                {% endif %}
             </li>
             {% endfor %}
         </ul>
@@ -120,7 +114,6 @@
     const addButton = document.getElementById("add-ingredient");
     const list = document.getElementById("ingredients-list");
     const template = document.getElementById("ingredient-template");
-    const quickAddButtons = document.querySelectorAll(".quick-add");
 
     function addIngredientRow(row = {}) {
         const fragment = template.content.cloneNode(true);
@@ -145,15 +138,6 @@
         addIngredientRow();
     });
 
-    quickAddButtons.forEach((button) => {
-        button.addEventListener("click", () => {
-            addIngredientRow({
-                name: button.dataset.name || "",
-                amount: button.dataset.amount || "",
-                unit: button.dataset.unit || "oz",
-            });
-        });
-    });
 </script>
 </body>
 </html>

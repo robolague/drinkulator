@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from typing import Any
 from urllib.error import URLError
@@ -82,23 +83,53 @@ JSON_LD_RE = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 
-COMMON_INGREDIENT_SIZES = [
-    {
-        "name": "Vodka",
-        "amount": 1.75,
-        "unit": "liters",
-        "label": "Vodka handle (1.75L)",
-    },
-    {"name": "Vodka", "amount": 750, "unit": "ml", "label": "Vodka bottle (750mL)"},
-    {"name": "Vodka", "amount": 1, "unit": "liters", "label": "Vodka bottle (1L)"},
-    {"name": "Club Soda", "amount": 2, "unit": "liters", "label": "Club soda (2L)"},
-    {
-        "name": "Orange Juice",
-        "amount": 52,
-        "unit": "oz",
-        "label": "Orange juice (52oz)",
-    },
-]
+PURCHASE_SIZE_PROFILES = {
+    "spirits": [
+        {"label": "1.75L handle", "size_ml": 1750.0},
+        {"label": "1L bottle", "size_ml": 1000.0},
+        {"label": "750mL bottle", "size_ml": 750.0},
+        {"label": "375mL bottle", "size_ml": 375.0},
+    ],
+    "juice": [
+        {"label": "1 gallon jug", "size_ml": UNIT_TO_ML["gallons"]},
+        {"label": "64oz carton", "size_ml": UNIT_TO_ML["oz"] * 64},
+        {"label": "52oz carton", "size_ml": UNIT_TO_ML["oz"] * 52},
+        {"label": "32oz bottle", "size_ml": UNIT_TO_ML["oz"] * 32},
+    ],
+    "carbonated_mixers": [
+        {"label": "2L bottle", "size_ml": 2000.0},
+        {"label": "1L bottle", "size_ml": 1000.0},
+        {"label": "12oz can", "size_ml": UNIT_TO_ML["oz"] * 12},
+    ],
+    "default": [
+        {"label": "1L bottle", "size_ml": 1000.0},
+        {"label": "750mL bottle", "size_ml": 750.0},
+        {"label": "500mL bottle", "size_ml": 500.0},
+    ],
+}
+
+SPIRIT_KEYWORDS = (
+    "vodka",
+    "gin",
+    "rum",
+    "tequila",
+    "whiskey",
+    "whisky",
+    "bourbon",
+    "scotch",
+    "brandy",
+    "liqueur",
+    "triple sec",
+)
+CARBONATED_MIXER_KEYWORDS = (
+    "soda",
+    "ginger beer",
+    "tonic",
+    "cola",
+    "sprite",
+    "seltzer",
+    "club soda",
+)
 
 
 def normalize_unit(raw_unit: str) -> str | None:
