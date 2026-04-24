@@ -1,0 +1,78 @@
+<section class="card" id="scaled-recipe-results">
+    {% if errors %}
+    <h2>Fix these issues</h2>
+    <ul class="result-errors">
+        {% for error in errors %}
+        <li>{{ error }}</li>
+        {% endfor %}
+    </ul>
+    {% elif results %}
+    <h2>Scaled Recipe</h2>
+    <ul class="results">
+        {% for item in results %}
+        <li>
+            <div class="result-main">
+                <span>{{ item.name }}</span>
+                <strong>{{ item.amount }} {{ unit_labels[output_unit] }}</strong>
+            </div>
+            {% if item.purchase_count and item.purchase_label and item.purchase_options %}
+            <form
+                method="post"
+                class="purchase-row"
+                hx-post="/scale-results"
+                hx-target="#scaled-recipe-results"
+                hx-swap="outerHTML"
+            >
+                {% for row in ingredient_rows %}
+                <input type="hidden" name="name" value="{{ row.name }}">
+                <input type="hidden" name="amount" value="{{ row.amount }}">
+                <input type="hidden" name="unit" value="{{ row.unit }}">
+                {% endfor %}
+                <input type="hidden" name="cooler_gallons" value="{{ cooler_gallons_input }}">
+                <input type="hidden" name="output_unit" value="{{ output_unit }}">
+                <input type="hidden" name="default_purchase_unit" value="{{ default_purchase_unit }}">
+                {% if recipe_url %}
+                <input type="hidden" name="recipe_url" value="{{ recipe_url }}">
+                {% endif %}
+
+                {% for result_item in results %}
+                {% if result_item.slug != item.slug %}
+                <input type="hidden" name="purchase_unit_{{ result_item.slug }}" value="{{ result_item.purchase_unit }}">
+                {% endif %}
+                {% endfor %}
+
+                <label class="purchase-hints" for="purchase_{{ item.slug }}">
+                    Buy as:
+                    <span class="purchase-count">{{ item.purchase_count }}</span> x
+                </label>
+                <select
+                    id="purchase_{{ item.slug }}"
+                    name="purchase_unit_{{ item.slug }}"
+                    class="purchase-option-select"
+                    hx-trigger="change"
+                    hx-post="/scale-results"
+                    hx-target="#scaled-recipe-results"
+                    hx-swap="outerHTML"
+                    hx-include="closest form"
+                >
+                    {% for option in item.purchase_options %}
+                    <option
+                        value="{{ option.unit }}"
+                        data-label="{{ option.label }}"
+                        data-size-ml="{{ option.size_ml }}"
+                        {% if option.unit == item.purchase_unit %}selected{% endif %}
+                    >
+                        {{ option.label }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </form>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <h2>Scaled Recipe</h2>
+    <p>Enter ingredients and scale your recipe to see live purchase-size updates here.</p>
+    {% endif %}
+</section>

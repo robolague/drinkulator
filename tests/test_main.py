@@ -241,3 +241,47 @@ def test_index_post_allows_per_ingredient_purchase_unit_override(client):
     body = response.get_data(as_text=True)
     assert "Handles (1.75L)" in body
     assert "Cans (12oz)" in body
+
+
+def test_index_uses_htmx_for_live_purchase_size_updates(client):
+    response = client.post(
+        "/",
+        data={
+            "name": ["Vodka", "Orange Juice"],
+            "amount": ["2", "4"],
+            "unit": ["oz", "oz"],
+            "output_unit": "oz",
+            "cooler_gallons": "5",
+            "action": "scale",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert 'src="https://unpkg.com/htmx.org@2.0.4"' in body
+    assert 'hx-post="/scale-results"' in body
+    assert "purchase-apply" not in body
+
+
+def test_scale_results_returns_partial_with_updated_purchase_count(client):
+    response = client.post(
+        "/scale-results",
+        data={
+            "name": ["Vodka", "Orange Juice"],
+            "amount": ["2", "4"],
+            "unit": ["oz", "oz"],
+            "output_unit": "oz",
+            "cooler_gallons": "5",
+            "purchase_unit_vodka-1": "handles",
+            "purchase_unit_orange-juice-2": "cans_12oz",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "<!doctype html>" not in body
+    assert 'id="scaled-recipe-results"' in body
+    assert 'id="purchase_vodka-1"' in body
+    assert 'id="purchase_orange-juice-2"' in body
+    assert "19</span> x" in body
+    assert "11</span> x" in body
