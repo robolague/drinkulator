@@ -1,6 +1,8 @@
 # Drink Calculator
 
-Switches single-drink measurements to ones that work in a 5-gallon cooler.
+Scale single-drink measurements to quantities that fill a 5-gallon cooler.
+
+This project is now a lightweight Flask web app with a simple GUI.
 
 ## Modern Python setup (uv)
 
@@ -23,11 +25,18 @@ From the repository root:
 uv sync
 ```
 
-This will create a local virtual environment at `.venv` and install project
-dependencies.
+This creates a local virtual environment at `.venv` and installs dependencies.
 
-### 3) Run the app
+### 3) Run the web app
 
 ```bash
-uv run python main.py
+uv run flask --app main run --debug
 ```
+
+Then open <http://127.0.0.1:5000> in your browser.
+
+## How to use
+
+1. Add one or more ingredients with name, amount, and unit.
+2. Pick an output unit for the final recipe.
+3. Click **Scale Recipe** to calculate.

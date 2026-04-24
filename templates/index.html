@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Drink Calculator</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+<main class="container">
+    <h1>Drink Calculator</h1>
+    <p class="subtitle">Scale your recipe to fill a {{ target_gallons }}-gallon cooler.</p>
+
+    {% if errors %}
+    <section class="card errors">
+        <h2>Fix these issues</h2>
+        <ul>
+            {% for error in errors %}
+            <li>{{ error }}</li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
+    <section class="card">
+        <h2>Recipe Input</h2>
+        <form method="post">
+            <div id="ingredients-list">
+                {% for row in ingredient_rows %}
+                <div class="ingredient-row">
+                    <input name="name" type="text" placeholder="Ingredient name" value="{{ row.name }}" required>
+                    <input name="amount" type="number" step="any" min="0" placeholder="Amount" value="{{ row.amount }}" required>
+                    <select name="unit" required>
+                        {% for unit in unit_order %}
+                        <option value="{{ unit }}" {% if row.unit == unit %}selected{% endif %}>{{ unit_labels[unit] }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endfor %}
+            </div>
+
+            <button class="secondary" type="button" id="add-ingredient">+ Add ingredient</button>
+
+            <label for="output_unit">Output unit</label>
+            <select id="output_unit" name="output_unit">
+                {% for unit in unit_order %}
+                <option value="{{ unit }}" {% if output_unit == unit %}selected{% endif %}>{{ unit_labels[unit] }}</option>
+                {% endfor %}
+            </select>
+
+            <button class="primary" type="submit">Scale to {{ target_gallons }} gallons</button>
+        </form>
+    </section>
+
+    {% if results %}
+    <section class="card">
+        <h2>Scaled Recipe</h2>
+        <ul class="results">
+            {% for item in results %}
+            <li>
+                <span>{{ item.name }}</span>
+                <strong>{{ item.amount }} {{ unit_labels[output_unit] }}</strong>
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+</main>
+
+<template id="ingredient-template">
+    <div class="ingredient-row">
+        <input name="name" type="text" placeholder="Ingredient name" required>
+        <input name="amount" type="number" step="any" min="0" placeholder="Amount" required>
+        <select name="unit" required>
+            {% for unit in unit_order %}
+            <option value="{{ unit }}" {% if unit == 'oz' %}selected{% endif %}>{{ unit_labels[unit] }}</option>
+            {% endfor %}
+        </select>
+    </div>
+</template>
+
+<script>
+    const addButton = document.getElementById("add-ingredient");
+    const list = document.getElementById("ingredients-list");
+    const template = document.getElementById("ingredient-template");
+
+    addButton.addEventListener("click", () => {
+        const fragment = template.content.cloneNode(true);
+        list.appendChild(fragment);
+    });
+</script>
+</body>
+</html>
