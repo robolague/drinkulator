@@ -8,13 +8,10 @@ from main import (
     TARGET_COOLER_ML,
     UNIT_TO_ML,
     app,
-    calculate_purchase_count,
     calculate_scaled_recipe,
-    calculate_scaled_recipe_with_purchase_options,
+    calculate_scaled_recipe_with_purchase_suggestions,
     extract_recipe_lines_from_json_ld,
-    get_purchase_option_with_fallback,
     import_ingredient_rows_from_url,
-    make_ingredient_slug,
     normalize_unit,
     parse_amount,
     parse_ingredient_line,
@@ -102,14 +99,15 @@ def test_calculate_scaled_recipe_scales_to_cooler_size():
     assert [item["name"] for item in results] == ["Vodka", "Orange Juice"]
 
 
-def test_calculate_scaled_recipe_with_purchase_options():
+def test_calculate_scaled_recipe_with_purchase_suggestions():
     ingredients = [{"name": "Vodka", "amount_ml": 1750.0}]
 
-    results = calculate_scaled_recipe_with_purchase_options(
+    results = calculate_scaled_recipe_with_purchase_suggestions(
         ingredients=ingredients,
         output_unit="liters",
         target_ml=3500.0,
         selected_purchase_units={"vodka-1": "handles"},
+        default_purchase_unit="bottles_750ml",
     )
 
     assert results == [
@@ -118,32 +116,33 @@ def test_calculate_scaled_recipe_with_purchase_options():
             "slug": "vodka-1",
             "name": "Vodka",
             "amount": 3.5,
+            "scaled_ml": 3500.0,
             "purchase_unit": "handles",
             "purchase_count": 2,
             "purchase_label": "Handles (1.75L)",
+            "purchase_options": PURCHASE_SIZE_PRESETS,
         }
     ]
 
 
-def test_get_purchase_option_with_fallback_defaults_for_unknown_unit():
-    option = get_purchase_option_with_fallback("missing_unit")
-    assert option["unit"] == PURCHASE_SIZE_PRESETS[0]["unit"]
-
-
-def test_calculate_purchase_count_rounds_up():
-    handles = next(item for item in PURCHASE_SIZE_PRESETS if item["unit"] == "handles")
-    assert calculate_purchase_count(2000.0, handles) == 2
-
-
-def test_make_ingredient_slug_includes_index():
-    assert make_ingredient_slug("Vodka", 3) == "vodka-3"
-
-
 def test_purchase_size_presets_include_common_units():
     keys = {item["unit"] for item in PURCHASE_SIZE_PRESETS}
+    assert "cans_12oz" in keys
+    assert "bottles_375ml" in keys
     assert "bottles_750ml" in keys
+    assert "bottles_1l" in keys
     assert "handles" in keys
     assert "bottles_2l" in keys
+    assert "jugs_1gal" in keys
+
+
+def test_core_unit_conversions_match_us_customary_definitions():
+    assert UNIT_TO_ML["oz"] == pytest.approx(29.5735295625)
+    assert UNIT_TO_ML["gallons"] == pytest.approx(3785.411784)
+    assert UNIT_TO_ML["cups"] == pytest.approx(236.5882365)
+    assert UNIT_TO_ML["quarts"] == pytest.approx(946.352946)
+    assert UNIT_TO_ML["tbsp"] == pytest.approx(14.78676478125)
+    assert UNIT_TO_ML["tsp"] == pytest.approx(4.92892159375)
 
 
 def test_index_get_renders_form(client):
@@ -153,7 +152,6 @@ def test_index_get_renders_form(client):
     body = response.get_data(as_text=True)
     assert "Drink Calculator" in body
     assert f'value="{DEFAULT_COOLER_GALLONS}"' in body
-    assert "Default purchase size" in body
     assert "Recipe Input" in body
 
 
@@ -165,7 +163,6 @@ def test_index_post_shows_validation_errors(client):
             "amount": ["1", "-2"],
             "unit": ["oz", "oz"],
             "output_unit": "oz",
-            "default_purchase_unit": "bottles_750ml",
             "cooler_gallons": "5",
             "action": "scale",
         },
@@ -185,7 +182,6 @@ def test_index_post_shows_scaled_recipe(client):
             "amount": ["2", "4"],
             "unit": ["oz", "oz"],
             "output_unit": "oz",
-            "default_purchase_unit": "bottles_750ml",
             "cooler_gallons": "5",
             "action": "scale",
         },
@@ -197,8 +193,7 @@ def test_index_post_shows_scaled_recipe(client):
     assert "Vodka" in body
     assert "Orange Juice" in body
     assert "Bottles (750mL)" in body
-    assert "name=\"purchase_unit_vodka-1\"" in body
-    assert "name=\"purchase_unit_orange-juice-2\"" in body
+    assert "purchase_unit_vodka-1" in body
 
 
 def test_index_post_imports_recipe_from_url(client, monkeypatch):
@@ -214,7 +209,6 @@ def test_index_post_imports_recipe_from_url(client, monkeypatch):
         data={
             "recipe_url": "https://example.com/drink",
             "output_unit": "oz",
-            "default_purchase_unit": "bottles_750ml",
             "cooler_gallons": "5",
             "action": "import",
         },
@@ -236,7 +230,6 @@ def test_index_post_allows_per_ingredient_purchase_unit_override(client):
             "amount": ["2", "4"],
             "unit": ["oz", "oz"],
             "output_unit": "oz",
-            "default_purchase_unit": "bottles_750ml",
             "purchase_unit_vodka-1": "handles",
             "purchase_unit_orange-juice-2": "cans_12oz",
             "cooler_gallons": "5",

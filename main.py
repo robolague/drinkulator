@@ -14,20 +14,22 @@ from flask import Flask, render_template, request
 app = Flask(__name__)
 
 DEFAULT_COOLER_GALLONS = 5.0
-TARGET_COOLER_ML = DEFAULT_COOLER_GALLONS * 3785.41
+US_FLUID_OUNCE_ML = 29.5735295625
+US_GALLON_ML = 3785.411784
+TARGET_COOLER_ML = DEFAULT_COOLER_GALLONS * US_GALLON_ML
 MAX_IMPORT_BYTES = 1_000_000
 
 UNIT_TO_ML = {
     "ml": 1.0,
-    "oz": 29.5735,
-    "tbsp": 14.7868,
-    "tsp": 4.92892,
+    "oz": US_FLUID_OUNCE_ML,
+    "tbsp": US_FLUID_OUNCE_ML / 2,
+    "tsp": US_FLUID_OUNCE_ML / 6,
     "liters": 1000.0,
-    "shots": 44.3602943,
+    "shots": US_FLUID_OUNCE_ML * 1.5,
     "handles": 1750.0,
-    "cups": 236.588,
-    "gallons": 3785.41,
-    "quarts": 946.353,
+    "cups": US_FLUID_OUNCE_ML * 8,
+    "gallons": US_GALLON_ML,
+    "quarts": US_GALLON_ML / 4,
 }
 
 UNIT_ALIASES = {
@@ -84,9 +86,14 @@ JSON_LD_RE = re.compile(
 )
 
 PURCHASE_SIZE_PRESETS = [
-    {"unit": "bottles_12oz", "label": "Bottles (12oz)", "size_ml": UNIT_TO_ML["oz"] * 12},
+    {
+        "unit": "cans_12oz",
+        "label": "Cans (12oz)",
+        "size_ml": 355.0,
+    },
     {"unit": "bottles_375ml", "label": "Bottles (375mL)", "size_ml": 375.0},
     {"unit": "bottles_750ml", "label": "Bottles (750mL)", "size_ml": 750.0},
+    {"unit": "bottles_1l", "label": "Bottles (1L)", "size_ml": 1000.0},
     {"unit": "handles", "label": "Handles (1.75L)", "size_ml": 1750.0},
     {"unit": "bottles_2l", "label": "Bottles (2L)", "size_ml": 2000.0},
     {"unit": "jugs_1gal", "label": "Jugs (1 gallon)", "size_ml": UNIT_TO_ML["gallons"]},
@@ -332,12 +339,33 @@ def get_purchase_preset(purchase_unit: str) -> dict[str, Any]:
     return get_purchase_preset(DEFAULT_PURCHASE_UNIT)
 
 
-def default_purchase_unit_for_amount(scaled_ml: float) -> str:
-    if scaled_ml >= 1500:
+def get_purchase_option_with_fallback(purchase_unit: str) -> dict[str, Any]:
+    return get_purchase_preset(purchase_unit)
+
+
+def calculate_purchase_count(scaled_ml: float, purchase_option: dict[str, Any]) -> int:
+    return max(1, math.ceil(scaled_ml / purchase_option["size_ml"]))
+
+
+def make_ingredient_slug(name: str, index: int) -> str:
+    base = re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-")
+    if not base:
+        base = "ingredient"
+    return f"{base}-{index}"
+
+
+def default_purchase_unit_for_amount(
+    scaled_ml: float, default_purchase_unit: str
+) -> str:
+    if scaled_ml >= 1500 and any(
+        item["unit"] == "handles" for item in PURCHASE_SIZE_PRESETS
+    ):
         return "handles"
-    if scaled_ml <= UNIT_TO_ML["oz"] * 14:
-        return "bottles_12oz"
-    return DEFAULT_PURCHASE_UNIT
+    if scaled_ml <= 355.0 and any(
+        item["unit"] == "cans_12oz" for item in PURCHASE_SIZE_PRESETS
+    ):
+        return "cans_12oz"
+    return default_purchase_unit
 
 
 def calculate_scaled_recipe(
@@ -362,34 +390,61 @@ def calculate_scaled_recipe(
     return results
 
 
-def calculate_scaled_recipe_with_purchase_suggestions(
+def calculate_scaled_recipe_with_purchase_options(
     ingredients: list[dict[str, Any]],
     output_unit: str,
+    selected_purchase_units: dict[str, str] | None = None,
+    default_purchase_unit: str = DEFAULT_PURCHASE_UNIT,
     target_ml: float = TARGET_COOLER_ML,
 ) -> list[dict[str, Any]]:
     total_ml = sum(item["amount_ml"] for item in ingredients)
     multiplier = target_ml / total_ml
     output_factor = UNIT_TO_ML[output_unit]
+    selected_purchase_units = selected_purchase_units or {}
 
     results: list[dict[str, Any]] = []
-    for ingredient in ingredients:
+    for index, ingredient in enumerate(ingredients, start=1):
         scaled_ml = ingredient["amount_ml"] * multiplier
         output_amount = scaled_ml / output_factor
-        purchase_unit = default_purchase_unit_for_amount(scaled_ml)
-        purchase_preset = get_purchase_preset(purchase_unit)
-        purchase_size_ml = purchase_preset["size_ml"]
-        purchase_count = max(1, math.ceil(scaled_ml / purchase_size_ml))
+        slug = make_ingredient_slug(ingredient["name"], index)
+        purchase_unit = selected_purchase_units.get(slug)
+        if not purchase_unit:
+            purchase_unit = default_purchase_unit_for_amount(
+                scaled_ml,
+                default_purchase_unit,
+            )
+        purchase_option = get_purchase_option_with_fallback(purchase_unit)
+        purchase_count = calculate_purchase_count(scaled_ml, purchase_option)
         results.append(
             {
+                "index": index,
+                "slug": slug,
                 "name": ingredient["name"],
                 "amount": round(output_amount, 2),
                 "scaled_ml": round(scaled_ml, 2),
-                "purchase_unit": purchase_unit,
+                "purchase_unit": purchase_option["unit"],
                 "purchase_count": purchase_count,
-                "purchase_label": purchase_preset["label"],
+                "purchase_label": purchase_option["label"],
+                "purchase_options": PURCHASE_SIZE_PRESETS,
             }
         )
     return results
+
+
+def calculate_scaled_recipe_with_purchase_suggestions(
+    ingredients: list[dict[str, Any]],
+    output_unit: str,
+    selected_purchase_units: dict[str, str] | None = None,
+    default_purchase_unit: str = DEFAULT_PURCHASE_UNIT,
+    target_ml: float = TARGET_COOLER_ML,
+) -> list[dict[str, Any]]:
+    return calculate_scaled_recipe_with_purchase_options(
+        ingredients=ingredients,
+        output_unit=output_unit,
+        selected_purchase_units=selected_purchase_units,
+        default_purchase_unit=default_purchase_unit,
+        target_ml=target_ml,
+    )
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -397,6 +452,7 @@ def index() -> str:
     errors: list[str] = []
     results: list[dict[str, Any]] = []
     output_unit = "oz"
+    default_purchase_unit = DEFAULT_PURCHASE_UNIT
     recipe_url = ""
     cooler_gallons_input = str(DEFAULT_COOLER_GALLONS)
     ingredient_rows = [{"name": "", "amount": "", "unit": "oz"}]
@@ -408,6 +464,14 @@ def index() -> str:
             "cooler_gallons", str(DEFAULT_COOLER_GALLONS)
         ).strip()
         output_unit = normalize_unit(request.form.get("output_unit", "oz")) or "oz"
+        default_purchase_unit = request.form.get(
+            "default_purchase_unit",
+            DEFAULT_PURCHASE_UNIT,
+        ).strip()
+        if not any(
+            item["unit"] == default_purchase_unit for item in PURCHASE_SIZE_PRESETS
+        ):
+            default_purchase_unit = DEFAULT_PURCHASE_UNIT
 
         cooler_gallons = parse_amount(cooler_gallons_input)
         if cooler_gallons is None or cooler_gallons <= 0:
@@ -447,9 +511,19 @@ def index() -> str:
             errors.append("Total ingredient volume must be greater than zero.")
 
         if not errors:
-            results = calculate_scaled_recipe_with_purchase_suggestions(
+            selected_purchase_units: dict[str, str] = {}
+            for index, ingredient in enumerate(parsed_ingredients, start=1):
+                slug = make_ingredient_slug(ingredient["name"], index)
+                submitted_purchase_unit = request.form.get(
+                    f"purchase_unit_{slug}", ""
+                ).strip()
+                if submitted_purchase_unit:
+                    selected_purchase_units[slug] = submitted_purchase_unit
+            results = calculate_scaled_recipe_with_purchase_options(
                 parsed_ingredients,
                 output_unit,
+                selected_purchase_units=selected_purchase_units,
+                default_purchase_unit=default_purchase_unit,
                 target_ml=cooler_gallons * UNIT_TO_ML["gallons"],
             )
 
@@ -458,6 +532,7 @@ def index() -> str:
         errors=errors,
         ingredient_rows=ingredient_rows,
         output_unit=output_unit,
+        default_purchase_unit=default_purchase_unit,
         purchase_size_presets=PURCHASE_SIZE_PRESETS,
         recipe_url=recipe_url,
         cooler_gallons_input=cooler_gallons_input,

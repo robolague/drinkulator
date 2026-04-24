@@ -38,6 +38,11 @@
                 {% endfor %}
             </select>
 
+            {% if results %}
+            {% for item in results %}
+            <input type="hidden" name="purchase_unit_{{ item.slug }}" value="{{ item.purchase_unit }}">
+            {% endfor %}
+            {% endif %}
             <button class="secondary" type="submit" name="action" value="import">Import + Convert Recipe</button>
         </form>
     </section>
@@ -71,6 +76,11 @@
                 {% endfor %}
             </select>
 
+            {% if results %}
+            {% for item in results %}
+            <input type="hidden" name="purchase_unit_{{ item.slug }}" value="{{ item.purchase_unit }}">
+            {% endfor %}
+            {% endif %}
             <button class="primary" type="submit" name="action" value="scale">Scale recipe</button>
         </form>
     </section>
@@ -86,12 +96,37 @@
                     <strong>{{ item.amount }} {{ unit_labels[output_unit] }}</strong>
                 </div>
                 {% if item.purchase_count and item.purchase_label and item.purchase_options %}
-                <small class="purchase-hints">
-                    Buy as: {{ item.purchase_count }} x
-                    <select class="purchase-option-select" data-base-ml="{{ item.scaled_ml }}">
+                <form method="post" class="purchase-row">
+                    {% for row in ingredient_rows %}
+                    <input type="hidden" name="name" value="{{ row.name }}">
+                    <input type="hidden" name="amount" value="{{ row.amount }}">
+                    <input type="hidden" name="unit" value="{{ row.unit }}">
+                    {% endfor %}
+                    <input type="hidden" name="cooler_gallons" value="{{ cooler_gallons_input }}">
+                    <input type="hidden" name="output_unit" value="{{ output_unit }}">
+                    <input type="hidden" name="action" value="scale">
+                    {% if recipe_url %}
+                    <input type="hidden" name="recipe_url" value="{{ recipe_url }}">
+                    {% endif %}
+
+                    {% for result_item in results %}
+                    {% if result_item.slug != item.slug %}
+                    <input type="hidden" name="purchase_unit_{{ result_item.slug }}" value="{{ result_item.purchase_unit }}">
+                    {% endif %}
+                    {% endfor %}
+
+                    <label class="purchase-hints" for="purchase_{{ item.slug }}">
+                        Buy as:
+                        <span class="purchase-count">{{ item.purchase_count }}</span> x
+                    </label>
+                    <select
+                        id="purchase_{{ item.slug }}"
+                        name="purchase_unit_{{ item.slug }}"
+                        class="purchase-option-select"
+                    >
                         {% for option in item.purchase_options %}
                         <option
-                            value="{{ option.size_ml }}"
+                            value="{{ option.unit }}"
                             data-label="{{ option.label }}"
                             data-size-ml="{{ option.size_ml }}"
                             {% if option.unit == item.purchase_unit %}selected{% endif %}
@@ -100,7 +135,8 @@
                         </option>
                         {% endfor %}
                     </select>
-                </small>
+                    <button type="submit" class="secondary purchase-apply">Apply</button>
+                </form>
                 {% endif %}
             </li>
             {% endfor %}
@@ -148,24 +184,6 @@
     addButton.addEventListener("click", () => {
         addIngredientRow();
     });
-
-    function updatePurchaseHintText(selectEl) {
-        const hint = selectEl.closest(".purchase-hints");
-        const selectedOption = selectEl.options[selectEl.selectedIndex];
-        const scaledMl = Number.parseFloat(selectEl.dataset.baseMl || "0");
-        const sizeMl = Number.parseFloat(selectedOption?.dataset.sizeMl || "0");
-        const label = selectedOption?.dataset.label || selectedOption?.textContent || "";
-        const count = Math.max(1, Math.ceil(scaledMl / sizeMl));
-        hint.innerHTML = `Buy as: ${count} x `;
-        hint.appendChild(selectEl);
-    }
-
-    document.querySelectorAll(".purchase-option-select").forEach((selectEl) => {
-        selectEl.addEventListener("change", () => {
-            updatePurchaseHintText(selectEl);
-        });
-    });
-
 </script>
 </body>
 </html>
