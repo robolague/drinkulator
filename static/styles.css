@@ -23,6 +23,13 @@ body {
     margin-top: 1rem;
 }
 
+.quick-add-grid {
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    margin: 1rem 0;
+}
+
 h1,
 h2 {
     margin-top: 0;

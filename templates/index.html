@@ -9,7 +9,7 @@
 <body>
 <main class="container">
     <h1>Drink Calculator</h1>
-    <p class="subtitle">Scale your recipe to fill a {{ target_gallons }}-gallon cooler.</p>
+    <p class="subtitle">Scale your recipe to fill a cooler (defaults to {{ target_gallons }} gallons).</p>
 
     {% if errors %}
     <section class="card errors">
@@ -23,8 +23,31 @@
     {% endif %}
 
     <section class="card">
+        <h2>Import from recipe URL</h2>
+        <form method="post">
+            <label for="recipe_url">Recipe URL</label>
+            <input id="recipe_url" name="recipe_url" type="url" placeholder="https://example.com/drink-recipe" value="{{ recipe_url }}">
+
+            <label for="cooler_gallons_import">Cooler size (gallons)</label>
+            <input id="cooler_gallons_import" name="cooler_gallons" type="number" step="any" min="0" value="{{ cooler_gallons_input }}" required>
+
+            <label for="output_unit_import">Output unit</label>
+            <select id="output_unit_import" name="output_unit">
+                {% for unit in unit_order %}
+                <option value="{{ unit }}" {% if output_unit == unit %}selected{% endif %}>{{ unit_labels[unit] }}</option>
+                {% endfor %}
+            </select>
+
+            <button class="secondary" type="submit" name="action" value="import">Import + Convert Recipe</button>
+        </form>
+    </section>
+
+    <section class="card">
         <h2>Recipe Input</h2>
         <form method="post">
+            <label for="cooler_gallons">Cooler size (gallons)</label>
+            <input id="cooler_gallons" name="cooler_gallons" type="number" step="any" min="0" value="{{ cooler_gallons_input }}" required>
+
             <div id="ingredients-list">
                 {% for row in ingredient_rows %}
                 <div class="ingredient-row">
@@ -39,6 +62,20 @@
                 {% endfor %}
             </div>
 
+            <div class="quick-add-grid">
+                {% for item in common_ingredient_sizes %}
+                <button
+                    class="secondary quick-add"
+                    type="button"
+                    data-name="{{ item.name }}"
+                    data-amount="{{ item.amount }}"
+                    data-unit="{{ item.unit }}"
+                >
+                    + {{ item.label }}
+                </button>
+                {% endfor %}
+            </div>
+
             <button class="secondary" type="button" id="add-ingredient">+ Add ingredient</button>
 
             <label for="output_unit">Output unit</label>
@@ -48,7 +85,7 @@
                 {% endfor %}
             </select>
 
-            <button class="primary" type="submit">Scale to {{ target_gallons }} gallons</button>
+            <button class="primary" type="submit" name="action" value="scale">Scale recipe</button>
         </form>
     </section>
 
@@ -83,10 +120,39 @@
     const addButton = document.getElementById("add-ingredient");
     const list = document.getElementById("ingredients-list");
     const template = document.getElementById("ingredient-template");
+    const quickAddButtons = document.querySelectorAll(".quick-add");
+
+    function addIngredientRow(row = {}) {
+        const fragment = template.content.cloneNode(true);
+        const nameInput = fragment.querySelector('input[name="name"]');
+        const amountInput = fragment.querySelector('input[name="amount"]');
+        const unitInput = fragment.querySelector('select[name="unit"]');
+
+        if (nameInput) {
+            nameInput.value = row.name || "";
+        }
+        if (amountInput) {
+            amountInput.value = row.amount || "";
+        }
+        if (unitInput && row.unit) {
+            unitInput.value = row.unit;
+        }
+
+        list.appendChild(fragment);
+    }
 
     addButton.addEventListener("click", () => {
-        const fragment = template.content.cloneNode(true);
-        list.appendChild(fragment);
+        addIngredientRow();
+    });
+
+    quickAddButtons.forEach((button) => {
+        button.addEventListener("click", () => {
+            addIngredientRow({
+                name: button.dataset.name || "",
+                amount: button.dataset.amount || "",
+                unit: button.dataset.unit || "oz",
+            });
+        });
     });
 </script>
 </body>
