@@ -39,4 +39,4 @@ Then open <http://127.0.0.1:5000> in your browser.
 
 1. Add one or more ingredients with name, amount, and unit.
 2. Pick an output unit for the final recipe.
-3. Click **Scale Recipe** to calculate.
+3. Click **Scale to 5.0 gallons** to calculate.
