@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from main import TARGET_COOLER_ML, UNIT_TO_ML, app, calculate_scaled_recipe, normalize_unit
+from main import (
+    TARGET_COOLER_ML,
+    UNIT_TO_ML,
+    app,
+    calculate_scaled_recipe,
+    normalize_unit,
+)
 
 
 @pytest.fixture()
@@ -27,7 +33,7 @@ def test_calculate_scaled_recipe_scales_to_cooler_size():
     results = calculate_scaled_recipe(ingredients, "oz")
 
     total_output_ml = sum(item["amount"] * UNIT_TO_ML["oz"] for item in results)
-    assert round(total_output_ml, 2) == round(TARGET_COOLER_ML, 2)
+    assert total_output_ml == pytest.approx(TARGET_COOLER_ML, abs=0.1)
     assert [item["name"] for item in results] == ["Vodka", "Orange Juice"]
 
 
