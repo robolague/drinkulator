@@ -1,87 +1,173 @@
 #! python3
-import time
+from __future__ import annotations
 
-#drinkulator - original calculations by Greg Miller (tenadar.com)
+from typing import Any
 
-#ml is the default measurement. 1 ml
-one_ml = 1
-one_oz = 29.5735
-one_tbsp = 14.7868
-one_tsp = 4.92892
-one_liter = 1000
-one_shot = 44.3602943
-one_handle = 1750
-one_cup = 236.588
-one_gallon = 3785.41
-one_quart= 946.353
-one_5gal = 18927.1
-ingredients = {}
-sum_of_ingredients = 0
+from flask import Flask, render_template, request
 
-number_of_ingredients = int(input("How many ingredients? "))
+app = Flask(__name__)
+
+TARGET_COOLER_ML = 18927.1
+
+UNIT_TO_ML = {
+    "ml": 1.0,
+    "oz": 29.5735,
+    "tbsp": 14.7868,
+    "tsp": 4.92892,
+    "liters": 1000.0,
+    "shots": 44.3602943,
+    "handles": 1750.0,
+    "cups": 236.588,
+    "gallons": 3785.41,
+    "quarts": 946.353,
+}
+
+UNIT_ALIASES = {
+    "ml": "ml",
+    "milliliter": "ml",
+    "milliliters": "ml",
+    "oz": "oz",
+    "ounce": "oz",
+    "ounces": "oz",
+    "tbsp": "tbsp",
+    "tablespoon": "tbsp",
+    "tablespoons": "tbsp",
+    "tsp": "tsp",
+    "teaspoon": "tsp",
+    "teaspoons": "tsp",
+    "l": "liters",
+    "liter": "liters",
+    "liters": "liters",
+    "shot": "shots",
+    "shots": "shots",
+    "handle": "handles",
+    "handles": "handles",
+    "cup": "cups",
+    "cups": "cups",
+    "gallon": "gallons",
+    "gallons": "gallons",
+    "quart": "quarts",
+    "quarts": "quarts",
+}
+
+UNIT_LABELS = {
+    "ml": "mL",
+    "oz": "Oz",
+    "tbsp": "Tbsp",
+    "tsp": "Tsp",
+    "liters": "Liters",
+    "shots": "Shots",
+    "handles": "Handles",
+    "cups": "Cups",
+    "gallons": "Gallons",
+    "quarts": "Quarts",
+}
+
+UNIT_ORDER = list(UNIT_TO_ML.keys())
 
 
-for number in range(number_of_ingredients):
-	name_of_ingredient = input("Name of ingredient: ")
-	amount_of_ingredient = float(input("Amount of ingredient: "))
-	measurement_of_ingredient =  input("Measurement of ingredient (mL, Oz, Tbsp, Tsp, L, shots, handles, cups, gallons, quarts: ")
-	measurement_of_ingredient = measurement_of_ingredient.lower()
-	if measurement_of_ingredient == "ml":
-		pass
-	elif measurement_of_ingredient == 'oz':
-		amount_of_ingredient = amount_of_ingredient * one_oz
-	elif measurement_of_ingredient == 'tbsp':
-		amount_of_ingredient = amount_of_ingredient * one_tbsp
-	elif measurement_of_ingredient == 'tsp':
-		amount_of_ingredient = amount_of_ingredient * one_tsp
-	elif measurement_of_ingredient == 'liters':
-		amount_of_ingredient = amount_of_ingredient * one_liter
-	elif measurement_of_ingredient == 'shots':
-		amount_of_ingredient = amount_of_ingredient * one_shot
-	elif measurement_of_ingredient == 'handles':
-		amount_of_ingredient = amount_of_ingredient * one_handle
-	elif measurement_of_ingredient == 'cups':
-		amount_of_ingredient = amount_of_ingredient * one_cup
-	elif measurement_of_ingredient == 'gallons':
-		amount_of_ingredient = amount_of_ingredient * one_gallon
-	elif measurement_of_ingredient == 'quarts':
-		amount_of_ingredient = amount_of_ingredient * one_quart
-	else:
-		print("Not a valid measurement")
+def normalize_unit(raw_unit: str) -> str | None:
+    return UNIT_ALIASES.get(raw_unit.strip().lower())
 
-	ingredients[name_of_ingredient]=amount_of_ingredient
 
-for key,value in ingredients.items():
-	sum_of_ingredients = sum_of_ingredients + value
-	multiply_by = one_5gal / sum_of_ingredients
+def calculate_scaled_recipe(
+    ingredients: list[dict[str, Any]], output_unit: str
+) -> list[dict[str, Any]]:
+    total_ml = sum(item["amount_ml"] for item in ingredients)
+    multiplier = TARGET_COOLER_ML / total_ml
+    output_factor = UNIT_TO_ML[output_unit]
 
-for key,value in ingredients.items():
-	value = multiply_by * value
+    results: list[dict[str, Any]] = []
+    for ingredient in ingredients:
+        scaled_ml = ingredient["amount_ml"] * multiplier
+        output_amount = scaled_ml / output_factor
+        results.append(
+            {
+                "name": ingredient["name"],
+                "amount": round(output_amount, 2),
+            }
+        )
+    return results
 
-	measurement_of_output =  input("Measurement of output (mL, Oz, Tbsp, Tsp, L, shots, handles, cups, gallons, quarts: ")
-	measurement_of_output = measurement_of_output.lower()
-	if measurement_of_output == "ml":
-		pass
-	elif measurement_of_output == 'oz':
-		amount_of_ingredient = value / one_oz
-	elif measurement_of_output == 'tbsp':
-		amount_of_ingredient = value / one_tbsp
-	elif measurement_of_output == 'tsp':
-		amount_of_ingredient = value / one_tsp
-	elif measurement_of_output == 'liters':
-		amount_of_ingredient = value / one_liter
-	elif measurement_of_output == 'shots':
-		amount_of_ingredient = value / one_shot
-	elif measurement_of_output == 'handles':
-		amount_of_ingredient = value / one_handle
-	elif measurement_of_output == 'cups':
-		amount_of_ingredient = value / one_cup
-	elif measurement_of_output == 'gallons':
-		amount_of_ingredient = value / one_gallon
-	elif measurement_of_output == 'quarts':
-		amount_of_ingredient = value / one_quart
-	else:
-		print("Not a valid measurement")
 
-	print("Ingredient: " + key, "Amount: " + str(amount_of_ingredient),measurement_of_output)
+@app.route("/", methods=["GET", "POST"])
+def index() -> str:
+    errors: list[str] = []
+    results: list[dict[str, Any]] = []
+    output_unit = "oz"
+    ingredient_rows = [{"name": "", "amount": "", "unit": "oz"}]
+
+    if request.method == "POST":
+        names = request.form.getlist("name")
+        amounts = request.form.getlist("amount")
+        units = request.form.getlist("unit")
+        output_unit = normalize_unit(request.form.get("output_unit", "oz")) or "oz"
+
+        parsed_ingredients: list[dict[str, Any]] = []
+        ingredient_rows = []
+
+        for index, (name, amount_raw, unit_raw) in enumerate(zip(names, amounts, units), start=1):
+            ingredient_rows.append(
+                {
+                    "name": name,
+                    "amount": amount_raw,
+                    "unit": normalize_unit(unit_raw or "oz") or "oz",
+                }
+            )
+
+            if not name.strip() and not amount_raw.strip():
+                continue
+            if not name.strip():
+                errors.append(f"Ingredient {index}: name is required.")
+                continue
+            if not amount_raw.strip():
+                errors.append(f"Ingredient {index}: amount is required.")
+                continue
+
+            unit_key = normalize_unit(unit_raw)
+            if not unit_key:
+                errors.append(f"Ingredient {index}: unit '{unit_raw}' is not valid.")
+                continue
+
+            try:
+                amount_value = float(amount_raw)
+            except ValueError:
+                errors.append(f"Ingredient {index}: amount must be numeric.")
+                continue
+
+            if amount_value <= 0:
+                errors.append(f"Ingredient {index}: amount must be greater than zero.")
+                continue
+
+            parsed_ingredients.append(
+                {
+                    "name": name.strip(),
+                    "amount_ml": amount_value * UNIT_TO_ML[unit_key],
+                }
+            )
+
+        if not parsed_ingredients:
+            errors.append("Add at least one valid ingredient.")
+
+        total_ml = sum(item["amount_ml"] for item in parsed_ingredients)
+        if parsed_ingredients and total_ml <= 0:
+            errors.append("Total ingredient volume must be greater than zero.")
+
+        if not errors:
+            results = calculate_scaled_recipe(parsed_ingredients, output_unit)
+
+    return render_template(
+        "index.html",
+        errors=errors,
+        ingredient_rows=ingredient_rows,
+        output_unit=output_unit,
+        results=results,
+        unit_order=UNIT_ORDER,
+        unit_labels=UNIT_LABELS,
+        target_gallons=round(TARGET_COOLER_ML / UNIT_TO_ML["gallons"], 1),
+    )
+
+
+if __name__ == "__main__":
+    app.run(debug=True)
 
