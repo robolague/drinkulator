@@ -7,6 +7,8 @@ import pytest
 
 from main import (
     DEFAULT_COOLER_GALLONS,
+    DRINK_CALCULATOR_RECIPE_IMPORTS,
+    DRINK_CALCULATOR_SCALE_REQUESTS,
     PURCHASE_SIZE_PRESETS,
     TARGET_COOLER_ML,
     UNIT_TO_ML,
@@ -32,6 +34,16 @@ def client():
     app.config["TESTING"] = True
     with app.test_client() as test_client:
         yield test_client
+
+
+def _counter_total_value(counter, **labels: str) -> float:
+    for metric in counter.collect():
+        for sample in metric.samples:
+            if sample.name != f"{counter._name}_total":
+                continue
+            if all(sample.labels.get(key) == value for key, value in labels.items()):
+                return float(sample.value)
+    return 0.0
 
 
 def test_normalize_unit_handles_aliases():
@@ -505,3 +517,103 @@ def test_scale_results_returns_partial_with_updated_purchase_count(client):
     assert 'id="purchase_orange-juice-2"' in body
     assert "4</span> x" in body
     assert "36</span> x" in body
+
+
+def test_metrics_endpoint_exposes_prometheus_metrics(client):
+    client.get("/")
+    client.post(
+        "/",
+        data={
+            "name": ["Vodka", "Orange Juice"],
+            "amount": ["2", "4"],
+            "unit": ["oz", "oz"],
+            "output_unit": "oz",
+            "cooler_gallons": "5",
+            "action": "scale",
+        },
+    )
+
+    response = client.get("/metrics")
+
+    assert response.status_code == 200
+    assert response.mimetype == "text/plain"
+    body = response.get_data(as_text=True)
+    assert "http_server_requests_total" in body
+    assert "http_server_request_duration_seconds_bucket" in body
+    assert "drink_calculator_scale_requests_total" in body
+    assert "drink_calculator_scale_input_rows_bucket" in body
+    assert 'http_route="/metrics"' not in body
+
+
+def test_scale_request_metrics_track_success_and_validation_errors(client):
+    success_before = _counter_total_value(
+        DRINK_CALCULATOR_SCALE_REQUESTS,
+        source="form",
+        result="success",
+    )
+    error_before = _counter_total_value(
+        DRINK_CALCULATOR_SCALE_REQUESTS,
+        source="form",
+        result="validation_error",
+    )
+
+    client.post(
+        "/",
+        data={
+            "name": ["", "Vodka"],
+            "amount": ["1", "-2"],
+            "unit": ["oz", "oz"],
+            "output_unit": "oz",
+            "cooler_gallons": "5",
+            "action": "scale",
+        },
+    )
+    client.post(
+        "/",
+        data={
+            "name": ["Vodka", "Orange Juice"],
+            "amount": ["2", "4"],
+            "unit": ["oz", "oz"],
+            "output_unit": "oz",
+            "cooler_gallons": "5",
+            "action": "scale",
+        },
+    )
+
+    success_after = _counter_total_value(
+        DRINK_CALCULATOR_SCALE_REQUESTS,
+        source="form",
+        result="success",
+    )
+    error_after = _counter_total_value(
+        DRINK_CALCULATOR_SCALE_REQUESTS,
+        source="form",
+        result="validation_error",
+    )
+
+    assert success_after >= success_before + 1
+    assert error_after >= error_before + 1
+
+
+def test_recipe_import_metrics_track_validation_error(client):
+    error_before = _counter_total_value(
+        DRINK_CALCULATOR_RECIPE_IMPORTS,
+        result="validation_error",
+    )
+
+    response = client.post(
+        "/",
+        data={
+            "recipe_url": "",
+            "output_unit": "oz",
+            "cooler_gallons": "5",
+            "action": "import",
+        },
+    )
+
+    assert response.status_code == 200
+    error_after = _counter_total_value(
+        DRINK_CALCULATOR_RECIPE_IMPORTS,
+        result="validation_error",
+    )
+    assert error_after >= error_before + 1
