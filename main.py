@@ -292,7 +292,9 @@ def _is_disallowed_host_ip(
     )
 
 
-def _resolve_host_ip_addresses(hostname: str) -> list[ipaddress.IPv4Address | ipaddress.IPv6Address]:
+def _resolve_host_ip_addresses(
+    hostname: str,
+) -> list[ipaddress.IPv4Address | ipaddress.IPv6Address]:
     try:
         host_records = socket.getaddrinfo(hostname, None, type=socket.SOCK_STREAM)
     except socket.gaierror:
@@ -345,9 +347,7 @@ def fetch_recipe_lines_from_url(recipe_url: str) -> list[str]:
     _validate_public_recipe_host(parsed.hostname)
 
     try:
-        request_obj = Request(
-            recipe_url, headers={"User-Agent": "DrinkCalculator/1.0"}
-        )
+        request_obj = Request(recipe_url, headers={"User-Agent": "DrinkCalculator/1.0"})
         with urlopen(request_obj, timeout=10) as response:
             raw_bytes = response.read(MAX_IMPORT_BYTES + 1)
             if len(raw_bytes) > MAX_IMPORT_BYTES:
@@ -773,4 +773,3 @@ def scale_results() -> str:
 
 if __name__ == "__main__":
     app.run(debug=True)
-

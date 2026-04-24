@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import ipaddress
-import pytest
 from urllib.error import URLError
+
+import pytest
 
 from main import (
     DEFAULT_COOLER_GALLONS,
@@ -21,8 +22,8 @@ from main import (
     import_ingredient_rows_from_url,
     normalize_unit,
     parse_amount,
-    parse_ingredients,
     parse_ingredient_line,
+    parse_ingredients,
 )
 
 
@@ -199,7 +200,7 @@ def test_build_scale_payload_from_rows_handles_invalid_default_purchase_unit():
         ingredient_rows=ingredient_rows,
         output_unit="oz",
         default_purchase_unit="not-a-real-unit",
-        cooler_gallons_input="5",
+        cooler_gallons_input="0.3",
         recipe_url="",
     )
     assert errors == []
