@@ -101,7 +101,10 @@ def test_calculate_scaled_recipe_scales_to_cooler_size():
 
 
 def test_calculate_scaled_recipe_raises_when_total_volume_zero():
-    with pytest.raises(ValueError, match="Total ingredient volume must be greater than zero."):
+    with pytest.raises(
+        ValueError,
+        match="Total ingredient volume must be greater than zero.",
+    ):
         calculate_scaled_recipe([], "oz")
 
 
@@ -132,7 +135,10 @@ def test_calculate_scaled_recipe_with_purchase_suggestions():
 
 
 def test_calculate_scaled_recipe_with_purchase_options_raises_when_total_volume_zero():
-    with pytest.raises(ValueError, match="Total ingredient volume must be greater than zero."):
+    with pytest.raises(
+        ValueError,
+        match="Total ingredient volume must be greater than zero.",
+    ):
         calculate_scaled_recipe_with_purchase_options([], "oz")
 
 
