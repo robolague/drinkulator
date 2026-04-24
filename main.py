@@ -60,6 +60,11 @@ DRINK_CALCULATOR_SCALE_RESULT_ROWS = Histogram(
     "Scaled ingredient count returned by successful requests.",
     ["source"],
 )
+DRINK_CALCULATOR_INGREDIENT_USAGE = Counter(
+    "drink_calculator_ingredient_usage",
+    "Ingredient usage frequency in successful scale requests.",
+    ["ingredient", "source"],
+)
 DRINK_CALCULATOR_RECIPE_IMPORTS = Counter(
     "drink_calculator_recipe_imports",
     "Recipe import outcomes.",
@@ -227,6 +232,16 @@ def _record_http_metrics_after_teardown(_exception: BaseException | None) -> Non
         http_request_method=method,
         http_route=route,
     ).dec()
+
+
+def _normalize_ingredient_metric_label(name: str) -> str:
+    normalized = re.sub(r"\s+", " ", name.strip().lower())
+    normalized = re.sub(r"[^a-z0-9]+", "_", normalized).strip("_")
+    if not normalized:
+        return "unknown"
+    if len(normalized) > 64:
+        return normalized[:64].rstrip("_")
+    return normalized
 
 
 def normalize_unit(raw_unit: str) -> str | None:
@@ -721,6 +736,12 @@ def build_scale_payload_from_rows(
     DRINK_CALCULATOR_SCALE_REQUESTS.labels(source=source, result=result).inc()
     if not errors:
         DRINK_CALCULATOR_SCALE_RESULT_ROWS.labels(source=source).observe(len(results))
+        for ingredient in parsed_ingredients:
+            ingredient_label = _normalize_ingredient_metric_label(ingredient["name"])
+            DRINK_CALCULATOR_INGREDIENT_USAGE.labels(
+                ingredient=ingredient_label,
+                source=source,
+            ).inc()
 
     return (
         ingredient_rows,

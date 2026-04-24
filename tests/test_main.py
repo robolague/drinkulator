@@ -7,6 +7,7 @@ import pytest
 
 from main import (
     DEFAULT_COOLER_GALLONS,
+    DRINK_CALCULATOR_INGREDIENT_USAGE,
     DRINK_CALCULATOR_RECIPE_IMPORTS,
     DRINK_CALCULATOR_SCALE_REQUESTS,
     PURCHASE_SIZE_PRESETS,
@@ -617,3 +618,64 @@ def test_recipe_import_metrics_track_validation_error(client):
         result="validation_error",
     )
     assert error_after >= error_before + 1
+
+
+def test_ingredient_usage_metric_tracks_popular_spirits(client):
+    vodka_before = _counter_total_value(
+        DRINK_CALCULATOR_INGREDIENT_USAGE,
+        ingredient="vodka",
+        source="form",
+    )
+    gin_before = _counter_total_value(
+        DRINK_CALCULATOR_INGREDIENT_USAGE,
+        ingredient="gin",
+        source="form",
+    )
+    rum_before = _counter_total_value(
+        DRINK_CALCULATOR_INGREDIENT_USAGE,
+        ingredient="rum",
+        source="form",
+    )
+
+    client.post(
+        "/",
+        data={
+            "name": ["Vodka", "Gin", "Lime Juice"],
+            "amount": ["2", "1", "3"],
+            "unit": ["oz", "oz", "oz"],
+            "output_unit": "oz",
+            "cooler_gallons": "5",
+            "action": "scale",
+        },
+    )
+    client.post(
+        "/",
+        data={
+            "name": ["RUM", "vodka", "Cola"],
+            "amount": ["2", "1", "4"],
+            "unit": ["oz", "oz", "oz"],
+            "output_unit": "oz",
+            "cooler_gallons": "5",
+            "action": "scale",
+        },
+    )
+
+    vodka_after = _counter_total_value(
+        DRINK_CALCULATOR_INGREDIENT_USAGE,
+        ingredient="vodka",
+        source="form",
+    )
+    gin_after = _counter_total_value(
+        DRINK_CALCULATOR_INGREDIENT_USAGE,
+        ingredient="gin",
+        source="form",
+    )
+    rum_after = _counter_total_value(
+        DRINK_CALCULATOR_INGREDIENT_USAGE,
+        ingredient="rum",
+        source="form",
+    )
+
+    assert vodka_after >= vodka_before + 2
+    assert gin_after >= gin_before + 1
+    assert rum_after >= rum_before + 1
