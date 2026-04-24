@@ -40,3 +40,19 @@ Then open <http://127.0.0.1:5000> in your browser.
 1. Add one or more ingredients with name, amount, and unit.
 2. Pick an output unit for the final recipe.
 3. Set cooler size (or keep the 5-gallon default), then click **Scale recipe**.
+
+## Local developer checks
+
+Install local hooks once:
+
+```bash
+make install-hooks
+```
+
+Run the same local checks manually:
+
+```bash
+make lint
+make test
+make check
+```
